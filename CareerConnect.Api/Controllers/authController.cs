@@ -31,7 +31,7 @@ namespace CareerConnect.Api.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<LoginResponse>> Login(LoginRequest request)
         {
-            var normalizedEmail = request.Emai.Trim().ToLower();
+            var normalizedEmail = request.Email.Trim().ToLower();
 
             var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Email == normalizedEmail);
 
