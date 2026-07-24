@@ -50,6 +50,13 @@ namespace CareerConnect.Api.Controllers
                 return Unauthorized("Email hoặc mật khẩu không đúng.");
             }
 
+            if (user.Status != "Active")
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    "Tài khoản hiện không hoạt động.");
+            }
+
             var token = _tokenService.CreateToken(user);
 
             var response = new LoginResponse
@@ -62,6 +69,8 @@ namespace CareerConnect.Api.Controllers
 
             return Ok(response);
         }
+
+        //**********Current User**********
 
         [Authorize]
         [HttpGet("me")]
