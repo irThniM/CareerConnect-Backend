@@ -31,13 +31,20 @@ namespace CareerConnect.Api.Controllers
         [HttpPost("login")]
         public async Task<ActionResult<LoginResponse>> Login(LoginRequest request)
         {
-            var normalizedEmail = request.Emai.Trim().ToLower();
+            var normalizedEmail = request.Email.Trim().ToLower();
 
             var user = await _dbContext.Users.FirstOrDefaultAsync(x => x.Email == normalizedEmail);
 
             if (user == null)
             {
                 return Unauthorized("Email hoặc mật khẩu không đúng.");
+            }
+
+            if (user.Status != "Active")
+            {
+                return StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    "Tài khoản hiện không hoạt động.");
             }
 
             var passwordResult = _passwordHasher.VerifyHashedPassword(
@@ -50,12 +57,7 @@ namespace CareerConnect.Api.Controllers
                 return Unauthorized("Email hoặc mật khẩu không đúng.");
             }
 
-            if (user.Status != "Active")
-            {
-                return StatusCode(
-                    StatusCodes.Status403Forbidden,
-                    "Tài khoản hiện không hoạt động.");
-            }
+
 
             var token = _tokenService.CreateToken(user);
 
