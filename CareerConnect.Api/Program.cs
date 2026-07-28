@@ -89,8 +89,10 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:5173",
-            "https://ten-frontend-cua-ban.vercel.app")
+            .WithOrigins(
+                "http://localhost:5173",
+                "https://career-connect-frontend-hazel.vercel.app"
+            )
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
