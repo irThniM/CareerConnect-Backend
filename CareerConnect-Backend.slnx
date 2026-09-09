@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="CareerConnect.Api/CareerConnect.Api.csproj" />
+  <Project Path="CareerConnect.Application/CareerConnect.Application.csproj" />
+  <Project Path="CareerConnect.Domain/CareerConnect.Domain.csproj" />
+  <Project Path="CareerConnect.Infrastructure/CareerConnect.Infrastructure.csproj" />
+</Solution>

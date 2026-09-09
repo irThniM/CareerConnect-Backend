@@ -1,0 +1,6 @@
+@CareerConnect.Infrastructure_HostAddress = http://localhost:5249
+
+GET {{CareerConnect.Infrastructure_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

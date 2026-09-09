@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CareerConnect.Domain\CareerConnect.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Common\" />
+    <Folder Include="Candidates\" />
+    <Folder Include="Companies\" />
+    <Folder Include="Jobs\" />
+    <Folder Include="Applications\" />
+    <Folder Include="Interviews\" />
+    <Folder Include="Feed\" />
+    <Folder Include="AiMatching\" />
+    <Folder Include="Notifications\" />
+    <Folder Include="Resumes\" />
+  </ItemGroup>
+
+</Project>
