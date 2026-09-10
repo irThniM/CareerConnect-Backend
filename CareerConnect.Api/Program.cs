@@ -1,15 +1,18 @@
+using CareerConnect.Api.Extensions;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-
+// Thêm Controllers và Swagger
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Gọi hàm mở rộng cấu hình Database & Auth Services ở đây
+builder.Services.AddDatabaseConfiguration(builder.Configuration);
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Cấu hình Middleware HTTP pipeline...
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -17,9 +20,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

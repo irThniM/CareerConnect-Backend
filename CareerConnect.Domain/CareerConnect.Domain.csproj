@@ -11,7 +11,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Enums\" />
     <Folder Include="Abstractions\" />
     <Folder Include="ValueObjects\" />
   </ItemGroup>
