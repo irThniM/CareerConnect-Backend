@@ -4,7 +4,9 @@ using CareerConnect.Application.Auth.Services;
 using CareerConnect.Domain.Entities;
 using CareerConnect.Domain.Enums;
 using CareerConnect.Infrastructure.Auth;
+using CareerConnect.Infrastructure.Email;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace CareerConnect.Infrastructure.Persistence
 {
@@ -13,61 +15,45 @@ namespace CareerConnect.Infrastructure.Persistence
         private readonly AppDbContext _context;
         private readonly PasswordHasher _passwordHasher;
         private readonly JwtTokenService _jwtTokenService;
+        private readonly IEmailService _emailService;
+        private readonly IMemoryCache _cache;
 
-        public AuthService(AppDbContext context, PasswordHasher passwordHasher, JwtTokenService jwtTokenService)
+        public AuthService(AppDbContext context, PasswordHasher passwordHasher, JwtTokenService jwtTokenService, IEmailService emailService, IMemoryCache cache)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _jwtTokenService = jwtTokenService;
+            _emailService = emailService;
+            _cache = cache; // Gán vào đây
         }
 
         public async Task<AuthResponseDto> RegisterCandidateAsync(RegisterCandidateRequestDto request)
         {
-            // 1. Kiểm tra email đã tồn tại chưa
             var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-            if (existingUser != null)
-            {
-                throw new Exception("Email này đã được sử dụng.");
-            }
+            if (existingUser != null) throw new Exception("Email này đã được sử dụng.");
 
-            // 2. Băm mật khẩu
-            var hashedPassword = _passwordHasher.HashPassword(request.Password);
+            // TẠO MÃ BÍ MẬT & LƯU TẠM VÀO CACHE (RAM) TRONG 15 PHÚT
+            var verificationToken = Guid.NewGuid().ToString("N");
+            _cache.Set(verificationToken, request, TimeSpan.FromMinutes(15));
 
-            // 3. Tạo User mới đi kèm với CandidateProfile rỗng
-            var newUser = new User
-            {
-                Email = request.Email,
-                PasswordHash = hashedPassword,
-                AccountType = AccountType.Candidate,
-                Status = UserStatus.Active,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
+            // GẮN TOKEN VÀO ĐƯỜNG LINK GỬI CHO KHÁCH
+            string verifyLink = $"http://localhost:5173/verify-email?token={verificationToken}";
 
-                // Tận dụng Navigation Property tạo luôn Profile:
-                CandidateProfile = new CandidateProfile
-                {
-                    FullName = request.Email.Split('@')[0], // Tạm lấy phần đầu của email làm tên hiển thị
-                    IsLookingForJob = true,
-                    RecruiterSearchEnabled = false
-                }
-            };
+            string emailBody = $@"
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
+            <h2 style='color: #2563eb; text-align: center;'>Chào mừng đến với CareerConnect!</h2>
+            <p>Xin chào <strong>{request.FullName}</strong>,</p>
+            <p>Vui lòng bấm vào nút bên dưới để kích hoạt tài khoản (Link có hiệu lực 15 phút):</p>
+            <div style='text-align: center; margin: 30px 0;'>
+                <a href='{verifyLink}' style='padding: 12px 24px; background-color: #00288e; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;'>Xác thực Email ngay</a>
+            </div>
+        </div>";
 
-            _context.Users.Add(newUser); // Lưu 1 phát là nó tự rớt xuống cả 2 bảng Users và candidate_profiles
-            await _context.SaveChangesAsync();
+            await _emailService.SendEmailAsync(request.Email, "[CareerConnect] Xác nhận đăng ký tài khoản", emailBody);
 
-            // 4. Sinh Access Token và Refresh Token
-            var accessToken = _jwtTokenService.GenerateToken(newUser);
-            var refreshToken = await CreateUserSessionAsync(newUser.Id);
-
-            return new AuthResponseDto
-            {
-                UserId = newUser.Id,
-                Email = newUser.Email,
-                AccountType = newUser.AccountType.ToString(),
-                AccessToken = accessToken,
-                RefreshToken = refreshToken
-            };
+            return new AuthResponseDto { UserId = Guid.Empty, Email = request.Email };
         }
+
 
         public async Task<AuthResponseDto> RegisterEmployerAsync(RegisterEmployerRequestDto request)
         {
@@ -163,6 +149,12 @@ namespace CareerConnect.Infrastructure.Persistence
                 throw new Exception("Email hoặc mật khẩu không chính xác.");
             }
 
+            // Kiểm tra nếu tài khoản chưa active (phòng hờ)
+            if (user.Status != UserStatus.Active)
+            {
+                throw new Exception("Tài khoản chưa được kích hoạt.");
+            }
+
             // 2. Kiểm tra mật khẩu
             bool isPasswordValid = _passwordHasher.VerifyPassword(request.Password, user.PasswordHash);
             if (!isPasswordValid)
@@ -183,6 +175,46 @@ namespace CareerConnect.Infrastructure.Persistence
                 RefreshToken = refreshToken
             };
         }
+
+        // HÀM NÀY ĐƯỢC CẬP NHẬT: KHI XÁC THỰC THÀNH CÔNG THÌ MỚI CHÍNH THỨC GHI DỮ LIỆU VÀO DATABASE
+        public async Task<bool> VerifyEmailAsync(string token) // Đổi tham số thành chuỗi token
+        {
+            // Tìm token trong Cache
+            if (!_cache.TryGetValue(token, out RegisterCandidateRequestDto? cachedRequest) || cachedRequest == null)
+            {
+                throw new Exception("Đường dẫn xác thực không hợp lệ hoặc đã hết hạn.");
+            }
+
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == cachedRequest.Email);
+            if (existingUser != null) return true;
+
+            // LÚC NÀY MỚI THỰC SỰ LƯU VÀO DATABASE
+            var hashedPassword = _passwordHasher.HashPassword(cachedRequest.Password);
+            var newUser = new User
+            {
+                Email = cachedRequest.Email,
+                PasswordHash = hashedPassword,
+                AccountType = AccountType.Candidate,
+                Status = UserStatus.Active,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                CandidateProfile = new CandidateProfile
+                {
+                    FullName = cachedRequest.FullName,
+                    IsLookingForJob = true,
+                    RecruiterSearchEnabled = false
+                }
+            };
+
+            _context.Users.Add(newUser);
+            await _context.SaveChangesAsync();
+
+            // Lưu thành công thì xóa token khỏi Cache để không ai click lại được nữa
+            _cache.Remove(token);
+
+            return true;
+        }
+
 
         // Hàm hỗ trợ sinh và lưu Session vào bảng user_sessions
         private async Task<string> CreateUserSessionAsync(Guid userId)

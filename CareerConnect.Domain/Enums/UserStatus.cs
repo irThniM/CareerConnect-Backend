@@ -2,9 +2,9 @@
 {
     public enum UserStatus
     {
-        Unverified, // UNVERIFIED[cite: 1]
-        Active,     // ACTIVE[cite: 1]
-        Banned,     // BANNED[cite: 1]
-        Deleted     // DELETED[cite: 1]
+        Unverified = 0, // Chưa xác thực
+        Active = 1,     // Đã kích hoạt / Hoạt động
+        Banned = 2,     // Bị khóa
+        Deleted = 3     // Đã xóa
     }
 }

@@ -18,19 +18,19 @@ namespace CareerConnect.Api.Controllers
             _authService = authService;
         }
 
-        [HttpPost("register/candidate")]
-        public async Task<ActionResult<AuthResponseDto>> RegisterCandidate([FromBody] RegisterCandidateRequestDto request)
-        {
-            try
+            [HttpPost("register/candidate")]
+            public async Task<ActionResult<AuthResponseDto>> RegisterCandidate([FromBody] RegisterCandidateRequestDto request)
             {
-                var result = await _authService.RegisterCandidateAsync(request);
-                return Ok(result);
+                try
+                {
+                    var result = await _authService.RegisterCandidateAsync(request);
+                    return Ok(result);
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest(new { message = ex.Message });
+                }
             }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
 
         [HttpPost("register/employer")]
         public async Task<ActionResult<AuthResponseDto>> RegisterEmployer([FromBody] RegisterEmployerRequestDto request)
@@ -53,6 +53,26 @@ namespace CareerConnect.Api.Controllers
             {
                 var result = await _authService.LoginAsync(request);
                 return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+
+        public class VerifyEmailRequestDto
+        {
+            public string Token { get; set; } = string.Empty;
+        }
+
+        [HttpPost("verify-email")]
+        public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequestDto request)
+        {
+            try
+            {
+                await _authService.VerifyEmailAsync(request.Token);
+                return Ok(new { message = "Kích hoạt tài khoản thành công!" });
             }
             catch (Exception ex)
             {
