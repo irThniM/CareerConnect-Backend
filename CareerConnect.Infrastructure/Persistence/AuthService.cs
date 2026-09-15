@@ -142,37 +142,42 @@ namespace CareerConnect.Infrastructure.Persistence
 
         public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
         {
-            // 1. Tìm user theo email
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            // 1. Tìm user kèm theo bảng CandidateProfile để lấy tên thật
+            var user = await _context.Users
+                .Include(u => u.CandidateProfile) // Nối bảng để lấy thông tin profile ứng viên
+                .FirstOrDefaultAsync(u => u.Email == request.Email);
+
             if (user == null || string.IsNullOrEmpty(user.PasswordHash))
             {
                 throw new Exception("Email hoặc mật khẩu không chính xác.");
             }
 
-            // Kiểm tra nếu tài khoản chưa active (phòng hờ)
             if (user.Status != UserStatus.Active)
             {
                 throw new Exception("Tài khoản chưa được kích hoạt.");
             }
 
-            // 2. Kiểm tra mật khẩu
             bool isPasswordValid = _passwordHasher.VerifyPassword(request.Password, user.PasswordHash);
             if (!isPasswordValid)
             {
                 throw new Exception("Email hoặc mật khẩu không chính xác.");
             }
 
-            // 3. Sinh Access Token và Refresh Token
             var accessToken = _jwtTokenService.GenerateToken(user);
             var refreshToken = await CreateUserSessionAsync(user.Id);
+
+            // Trả về thêm FullName (nếu là Candidate thì lấy tên trong profile, ko thì để trống)
+            string fullName = user.CandidateProfile?.FullName ?? user.Email;
 
             return new AuthResponseDto
             {
                 UserId = user.Id,
                 Email = user.Email,
+                FullName = fullName,
                 AccountType = user.AccountType.ToString(),
                 AccessToken = accessToken,
-                RefreshToken = refreshToken
+                RefreshToken = refreshToken,
+
             };
         }
 
