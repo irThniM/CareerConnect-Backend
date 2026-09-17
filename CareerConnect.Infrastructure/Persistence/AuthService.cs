@@ -40,14 +40,14 @@ namespace CareerConnect.Infrastructure.Persistence
             string verifyLink = $"http://localhost:5173/verify-email?token={verificationToken}";
 
             string emailBody = $@"
-        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
-            <h2 style='color: #2563eb; text-align: center;'>Chào mừng đến với CareerConnect!</h2>
-            <p>Xin chào <strong>{request.FullName}</strong>,</p>
-            <p>Vui lòng bấm vào nút bên dưới để kích hoạt tài khoản (Link có hiệu lực 15 phút):</p>
-            <div style='text-align: center; margin: 30px 0;'>
-                <a href='{verifyLink}' style='padding: 12px 24px; background-color: #00288e; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;'>Xác thực Email ngay</a>
-            </div>
-        </div>";
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
+                    <h2 style='color: #2563eb; text-align: center;'>Chào mừng đến với CareerConnect!</h2>
+                    <p>Xin chào <strong>{request.FullName}</strong>,</p>
+                    <p>Vui lòng bấm vào nút bên dưới để kích hoạt tài khoản (Link có hiệu lực 15 phút):</p>
+                    <div style='text-align: center; margin: 30px 0;'>
+                        <a href='{verifyLink}' style='padding: 12px 24px; background-color: #00288e; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;'>Xác thực Email ngay</a>
+                    </div>
+                </div>";
 
             await _emailService.SendEmailAsync(request.Email, "[CareerConnect] Xác nhận đăng ký tài khoản", emailBody);
 
@@ -55,21 +55,65 @@ namespace CareerConnect.Infrastructure.Persistence
         }
 
 
+        // 1. HÀM NÀY CHỈ LƯU CACHE VÀ BẮN MAIL (TUYỆT ĐỐI KHÔNG LƯU DATABASE)
         public async Task<AuthResponseDto> RegisterEmployerAsync(RegisterEmployerRequestDto request)
         {
-            // Sử dụng Database Transaction để đảm bảo tính toàn vẹn
+            var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            if (existingUser != null) throw new Exception("Email này đã được sử dụng.");
+
+            // Tạo mã OTP 6 số ngẫu nhiên
+            string otpCode = new Random().Next(100000, 999999).ToString();
+
+            // Lưu Thông tin form & OTP vào Cache 15 phút
+            _cache.Set($"EmployerReg_{request.Email}", request, TimeSpan.FromMinutes(15));
+            _cache.Set($"EmployerOtp_{request.Email}", otpCode, TimeSpan.FromMinutes(15));
+
+            // Gửi email
+            string emailBody = $@"
+            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
+                <h2 style='color: #00b14f; text-align: center;'>Mã xác thực OTP</h2>
+                <p>Xin chào <strong>{request.ContactName}</strong>,</p>
+                <p>Mã xác thực (OTP) cho tài khoản doanh nghiệp <strong>{request.CompanyName}</strong> của bạn là:</p>
+                <div style='text-align: center; margin: 30px 0;'>
+                    <span style='padding: 12px 24px; background-color: #f3f4f6; color: #00b14f; font-size: 28px; font-weight: bold; border-radius: 5px; letter-spacing: 5px;'>{otpCode}</span>
+                </div>
+                <p style='color: #777; font-size: 12px;'>Mã này có hiệu lực trong vòng 15 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
+            </div>";
+
+            await _emailService.SendEmailAsync(request.Email, "[CareerConnect] Mã xác thực OTP", emailBody);
+
+            // Trả về email để Frontend biết là thành công, KHÔNG TRẢ VỀ TOKEN
+            return new AuthResponseDto { UserId = Guid.Empty, Email = request.Email };
+        }
+
+
+        // 2. HÀM NÀY KIỂM TRA OTP VÀ MỚI THỰC SỰ LƯU VÀO DATABASE
+        public async Task<bool> VerifyEmployerOtpAsync(string email, string otp)
+        {
+            // Kiểm tra OTP
+            if (!_cache.TryGetValue($"EmployerOtp_{email}", out string? cachedOtp) || cachedOtp != otp)
+            {
+                throw new Exception("Mã OTP không chính xác hoặc đã hết hạn.");
+            }
+
+            // Lấy lại dữ liệu người dùng đã nhập ở Form
+            if (!_cache.TryGetValue(
+                $"EmployerReg_{email}",
+                out RegisterEmployerRequestDto? request) || request == null)
+            {
+                throw new Exception("Thông tin đăng ký đã hết hạn, vui lòng đăng ký lại từ đầu.");
+            }
+
+            // BẮT ĐẦU LƯU DATABASE
             using var transaction = await _context.Database.BeginTransactionAsync();
+
             try
             {
-                // 1. Kiểm tra email đã tồn tại chưa
-                var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-                if (existingUser != null)
-                {
-                    throw new Exception("Email này đã được sử dụng.");
-                }
-
-                // 2. Tạo User trung tâm
                 var hashedPassword = _passwordHasher.HashPassword(request.Password);
+
+                // ==========================================
+                // 1. LƯU USER
+                // ==========================================
                 var newUser = new User
                 {
                     Email = request.Email,
@@ -83,17 +127,38 @@ namespace CareerConnect.Infrastructure.Persistence
                 _context.Users.Add(newUser);
                 await _context.SaveChangesAsync();
 
-                // 3. Tạo Doanh nghiệp mới (Table: Companies)
+                // ==========================================
+                // 2. LƯU COMPANY
+                // ==========================================
                 var newCompany = new Company
                 {
                     CompanyName = request.CompanyName,
+
+                    // MST không bắt buộc
+                    TaxCode = string.IsNullOrWhiteSpace(request.TaxCode)
+                        ? null
+                        : request.TaxCode.Trim(),
+
+                    // Trạng thái MST
+                    // Không có MST => NULL
+                    // Có MST => lấy trạng thái đã tra cứu
+                    TaxStatus = string.IsNullOrWhiteSpace(request.TaxCode)
+                        ? null
+                        : request.TaxStatus,
+
                     Industry = request.Industry,
                     CompanySize = request.CompanySize,
+
                     Address = $"{request.DetailedAddress}, {request.District}, {request.City}",
+
                     Website = request.Website,
+
                     ContactEmail = request.Email,
                     PhoneNumber = request.PhoneNumber,
-                    Status = "ACTIVE",
+
+                    // Trạng thái Company trên CareerConnect
+                    Status = "PENDING",
+
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -101,37 +166,38 @@ namespace CareerConnect.Infrastructure.Persistence
                 _context.Companies.Add(newCompany);
                 await _context.SaveChangesAsync();
 
-                // 4. Liên kết User với Company làm OWNER (Table: CompanyMembers)
+                // ==========================================
+                // 3. LƯU COMPANY MEMBER
+                // ==========================================
                 var companyMember = new CompanyMember
                 {
                     CompanyId = newCompany.Id,
                     UserId = newUser.Id,
                     MemberRole = "OWNER",
-                    Status = "ACTIVE",
+                    Status = "PENDING",
+
                     FullName = request.ContactName,
                     ContactEmail = request.Email,
                     ZaloNumber = request.PhoneNumber,
+
                     CreatedAt = DateTime.UtcNow
                 };
 
                 _context.CompanyMembers.Add(companyMember);
                 await _context.SaveChangesAsync();
 
-                // Commit transaction
+                // ==========================================
+                // 4. COMMIT
+                // ==========================================
                 await transaction.CommitAsync();
 
-                // 5. Sinh Access Token và Refresh Token
-                var accessToken = _jwtTokenService.GenerateToken(newUser);
-                var refreshToken = await CreateUserSessionAsync(newUser.Id);
+                // ==========================================
+                // 5. XÓA CACHE
+                // ==========================================
+                _cache.Remove($"EmployerOtp_{email}");
+                _cache.Remove($"EmployerReg_{email}");
 
-                return new AuthResponseDto
-                {
-                    UserId = newUser.Id,
-                    Email = newUser.Email,
-                    AccountType = newUser.AccountType.ToString(),
-                    AccessToken = accessToken,
-                    RefreshToken = refreshToken
-                };
+                return true;
             }
             catch (Exception)
             {
@@ -142,9 +208,9 @@ namespace CareerConnect.Infrastructure.Persistence
 
         public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
         {
-            // 1. Tìm user kèm theo bảng CandidateProfile để lấy tên thật
+            // 1. Tìm user, chỉ Include CandidateProfile thôi
             var user = await _context.Users
-                .Include(u => u.CandidateProfile) // Nối bảng để lấy thông tin profile ứng viên
+                .Include(u => u.CandidateProfile)
                 .FirstOrDefaultAsync(u => u.Email == request.Email);
 
             if (user == null || string.IsNullOrEmpty(user.PasswordHash))
@@ -166,8 +232,24 @@ namespace CareerConnect.Infrastructure.Persistence
             var accessToken = _jwtTokenService.GenerateToken(user);
             var refreshToken = await CreateUserSessionAsync(user.Id);
 
-            // Trả về thêm FullName (nếu là Candidate thì lấy tên trong profile, ko thì để trống)
-            string fullName = user.CandidateProfile?.FullName ?? user.Email;
+            // 2. Logic lấy tên hiển thị 
+            string fullName = user.Email.Split('@')[0]; // Tên mặc định
+
+            if (user.AccountType == AccountType.Candidate && user.CandidateProfile != null)
+            {
+                fullName = user.CandidateProfile.FullName;
+            }
+            else if (user.AccountType == AccountType.Employer)
+            {
+                // Tự động chọc thẳng vào bảng CompanyMembers tìm thông tin theo UserId
+                var employerProfile = await _context.CompanyMembers
+                    .FirstOrDefaultAsync(cm => cm.UserId == user.Id);
+
+                if (employerProfile != null && !string.IsNullOrEmpty(employerProfile.FullName))
+                {
+                    fullName = employerProfile.FullName;
+                }
+            }
 
             return new AuthResponseDto
             {
@@ -176,8 +258,7 @@ namespace CareerConnect.Infrastructure.Persistence
                 FullName = fullName,
                 AccountType = user.AccountType.ToString(),
                 AccessToken = accessToken,
-                RefreshToken = refreshToken,
-
+                RefreshToken = refreshToken
             };
         }
 

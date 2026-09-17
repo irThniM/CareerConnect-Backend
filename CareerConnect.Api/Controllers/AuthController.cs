@@ -33,18 +33,39 @@ namespace CareerConnect.Api.Controllers
             }
 
         [HttpPost("register/employer")]
-        public async Task<ActionResult<AuthResponseDto>> RegisterEmployer([FromBody] RegisterEmployerRequestDto request)
+        public async Task<IActionResult> RegisterEmployer([FromBody] RegisterEmployerRequestDto request)
         {
             try
             {
-                var result = await _authService.RegisterEmployerAsync(request);
-                return Ok(result);
+                await _authService.RegisterEmployerAsync(request);
+                return Ok(new { message = "Đã gửi mã OTP. Vui lòng kiểm tra email." });
             }
             catch (Exception ex)
             {
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        public class VerifyOtpRequestDto
+        {
+            public string Email { get; set; } = string.Empty;
+            public string Otp { get; set; } = string.Empty;
+        }
+
+        [HttpPost("verify-otp/employer")]
+        public async Task<IActionResult> VerifyEmployerOtp([FromBody] VerifyOtpRequestDto request)
+        {
+            try
+            {
+                await _authService.VerifyEmployerOtpAsync(request.Email, request.Otp);
+                return Ok(new { message = "Xác thực thành công! Tài khoản đang chờ duyệt." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
 
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginRequestDto request)

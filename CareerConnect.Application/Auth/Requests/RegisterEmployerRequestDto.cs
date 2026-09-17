@@ -9,7 +9,9 @@ public string Email { get; set; } = string.Empty;
         public string PhoneNumber { get; set; } = string.Empty;
         public string JobTitle { get; set; } = string.Empty;
         public string CompanyName { get; set; } = string.Empty;
-        
+        public string TaxCode { get; set; } = string.Empty;
+        public string? TaxStatus { get; set; }
+
         // Thêm 2 dòng này vào DTO nếu đang bị thiếu nè:
         public string City { get; set; } = string.Empty;
         public string District { get; set; } = string.Empty;
