@@ -22,6 +22,7 @@ namespace CareerConnect.Api.Extensions
 
             services.AddScoped<IEmailService, EmailService>();
             services.AddMemoryCache();
+            services.AddHttpClient();
 
             // 3. THÊM ĐOẠN NÀY ĐỂ MỞ CORS CHO FRONTEND (React - Vite cổng 5173)
             services.AddCors(options =>

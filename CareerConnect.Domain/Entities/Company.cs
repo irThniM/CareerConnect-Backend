@@ -5,6 +5,7 @@
         public long Id { get; set; }
         public string CompanyName { get; set; } = string.Empty;
         public string? TaxCode { get; set; }
+        public string? TaxStatus { get; set; }
         public string? Website { get; set; }
         public string? Industry { get; set; }
         public string? CompanySize { get; set; }
