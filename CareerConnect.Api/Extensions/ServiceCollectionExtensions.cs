@@ -1,5 +1,4 @@
-﻿
-using CareerConnect.Application.Auth.Services;
+﻿using CareerConnect.Application.Auth.Services;
 using CareerConnect.Infrastructure.Auth;
 using CareerConnect.Infrastructure.Email;
 using CareerConnect.Infrastructure.Persistence;
@@ -20,17 +19,18 @@ namespace CareerConnect.Api.Extensions
             services.AddScoped<PasswordHasher>();
             services.AddScoped<JwtTokenService>();
 
-            services.AddScoped<IEmailService, EmailService>();
-            services.AddMemoryCache();
-            services.AddHttpClient();
+            // THAY ĐỔI Ở ĐÂY: Đăng ký EmailService đi kèm với cấu hình HttpClient chuẩn
+            services.AddHttpClient<IEmailService, EmailService>();
 
-            // 3. THÊM ĐOẠN NÀY ĐỂ MỞ CORS CHO FRONTEND (React - Vite cổng 5173)
+            services.AddMemoryCache();
+
+            // 3. MỞ CORS CHO FRONTEND (React - Vite cổng 5173)
             services.AddCors(options =>
             {
                 options.AddPolicy("AllowReactApp",
                     policy =>
                     {
-                        policy.WithOrigins("http://localhost:5173") // Cho phép React gọi sang
+                        policy.WithOrigins("http://localhost:5173")
                               .AllowAnyHeader()
                               .AllowAnyMethod();
                     });

@@ -1,48 +1,59 @@
-﻿using System.Net;
-using System.Net.Mail;
+﻿using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 
 namespace CareerConnect.Infrastructure.Email
 {
     public interface IEmailService
     {
-        Task SendEmailAsync(string toEmail, string subject, string htmlMessage);
+        // Hàm mới dùng Template thay cho HTML thuần
+        Task SendEmailWithTemplateAsync(string toEmail, int templateId, object parameters);
     }
 
     public class EmailService : IEmailService
     {
         private readonly IConfiguration _config;
+        private readonly HttpClient _httpClient;
 
-        public EmailService(IConfiguration config)
+        public EmailService(IConfiguration config, HttpClient httpClient)
         {
             _config = config;
+            _httpClient = httpClient;
         }
 
-        public async Task SendEmailAsync(string toEmail, string subject, string htmlMessage)
+       public async Task SendEmailWithTemplateAsync(string toEmail, int templateId, object parameters)
         {
-            var mailServer = _config["EmailSettings:MailServer"];
-            var mailPort = int.Parse(_config["EmailSettings:MailPort"]!);
-            var senderName = _config["EmailSettings:SenderName"];
-            var senderEmail = _config["EmailSettings:SenderEmail"];
-            var password = _config["EmailSettings:Password"];
+            // 1. Đọc key. Phải đảm bảo bác đặt tên đúng y xì thế này trong User Secrets
+            var apiKey = _config["EmailSettings:ApiKey"];
 
-            var client = new SmtpClient(mailServer, mailPort)
+            if (string.IsNullOrWhiteSpace(apiKey))
             {
-                Credentials = new NetworkCredential(senderEmail, password),
-                EnableSsl = true
+                throw new Exception("Hệ thống không đọc được API Key. Vui lòng kiểm tra lại User Secrets.");
+            }
+
+            var payload = new
+            {
+                to = new[] { new { email = toEmail } },
+                templateId = templateId,
+                @params = parameters
             };
 
-            var mailMessage = new MailMessage
+            var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            // 2. Tạo Request Message và gắn Header trực tiếp vào đây
+            var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email");
+            request.Headers.Add("api-key", apiKey);
+            request.Headers.Add("accept", "application/json");
+            request.Content = content;
+
+            // 3. Bắn API
+            var response = await _httpClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
             {
-                From = new MailAddress(senderEmail!, senderName),
-                Subject = subject,
-                Body = htmlMessage,
-                IsBodyHtml = true
-            };
-
-            mailMessage.To.Add(toEmail);
-
-            await client.SendMailAsync(mailMessage);
+                var error = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Lỗi Brevo API: {error}");
+            }
         }
     }
 }

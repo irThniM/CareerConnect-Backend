@@ -39,17 +39,16 @@ namespace CareerConnect.Infrastructure.Persistence
             // GẮN TOKEN VÀO ĐƯỜNG LINK GỬI CHO KHÁCH
             string verifyLink = $"http://localhost:5173/verify-email?token={verificationToken}";
 
-            string emailBody = $@"
-                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
-                    <h2 style='color: #2563eb; text-align: center;'>Chào mừng đến với CareerConnect!</h2>
-                    <p>Xin chào <strong>{request.FullName}</strong>,</p>
-                    <p>Vui lòng bấm vào nút bên dưới để kích hoạt tài khoản (Link có hiệu lực 15 phút):</p>
-                    <div style='text-align: center; margin: 30px 0;'>
-                        <a href='{verifyLink}' style='padding: 12px 24px; background-color: #00288e; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;'>Xác thực Email ngay</a>
-                    </div>
-                </div>";
-
-            await _emailService.SendEmailAsync(request.Email, "[CareerConnect] Xác nhận đăng ký tài khoản", emailBody);
+            // GỌI API BREVO ĐỂ GỬI MAIL THEO TEMPLATE (Giả sử ID là 1)
+            await _emailService.SendEmailWithTemplateAsync(
+                toEmail: request.Email,
+                templateId: 1, // XEM LƯU Ý BÊN DƯỚI ĐỂ THAY SỐ NÀY
+                parameters: new
+                {
+                    FullName = request.FullName, // Brevo sẽ nhận bằng {{params.FullName}}
+                    VerifyLink = verifyLink      // Brevo sẽ nhận bằng {{params.VerifyLink}}
+                }
+            );
 
             return new AuthResponseDto { UserId = Guid.Empty, Email = request.Email };
         }
@@ -68,19 +67,17 @@ namespace CareerConnect.Infrastructure.Persistence
             _cache.Set($"EmployerReg_{request.Email}", request, TimeSpan.FromMinutes(15));
             _cache.Set($"EmployerOtp_{request.Email}", otpCode, TimeSpan.FromMinutes(15));
 
-            // Gửi email
-            string emailBody = $@"
-            <div style='font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
-                <h2 style='color: #00b14f; text-align: center;'>Mã xác thực OTP</h2>
-                <p>Xin chào <strong>{request.ContactName}</strong>,</p>
-                <p>Mã xác thực (OTP) cho tài khoản doanh nghiệp <strong>{request.CompanyName}</strong> của bạn là:</p>
-                <div style='text-align: center; margin: 30px 0;'>
-                    <span style='padding: 12px 24px; background-color: #f3f4f6; color: #00b14f; font-size: 28px; font-weight: bold; border-radius: 5px; letter-spacing: 5px;'>{otpCode}</span>
-                </div>
-                <p style='color: #777; font-size: 12px;'>Mã này có hiệu lực trong vòng 15 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
-            </div>";
-
-            await _emailService.SendEmailAsync(request.Email, "[CareerConnect] Mã xác thực OTP", emailBody);
+            // GỌI API BREVO ĐỂ GỬI MAIL THEO TEMPLATE (Giả sử ID là 2)
+            await _emailService.SendEmailWithTemplateAsync(
+                toEmail: request.Email,
+                templateId: 1, // XEM LƯU Ý BÊN DƯỚI ĐỂ THAY SỐ NÀY
+                parameters: new
+                {
+                    ContactName = request.ContactName, // Brevo sẽ nhận bằng {{params.ContactName}}
+                    CompanyName = request.CompanyName, // Brevo sẽ nhận bằng {{params.CompanyName}}
+                    OtpCode = otpCode                  // Brevo sẽ nhận bằng {{params.OtpCode}}
+                }
+            );
 
             // Trả về email để Frontend biết là thành công, KHÔNG TRẢ VỀ TOKEN
             return new AuthResponseDto { UserId = Guid.Empty, Email = request.Email };
@@ -97,9 +94,7 @@ namespace CareerConnect.Infrastructure.Persistence
             }
 
             // Lấy lại dữ liệu người dùng đã nhập ở Form
-            if (!_cache.TryGetValue(
-                $"EmployerReg_{email}",
-                out RegisterEmployerRequestDto? request) || request == null)
+            if (!_cache.TryGetValue($"EmployerReg_{email}", out RegisterEmployerRequestDto? request) || request == null)
             {
                 throw new Exception("Thông tin đăng ký đã hết hạn, vui lòng đăng ký lại từ đầu.");
             }
@@ -111,9 +106,7 @@ namespace CareerConnect.Infrastructure.Persistence
             {
                 var hashedPassword = _passwordHasher.HashPassword(request.Password);
 
-                // ==========================================
                 // 1. LƯU USER
-                // ==========================================
                 var newUser = new User
                 {
                     Email = request.Email,
@@ -123,77 +116,45 @@ namespace CareerConnect.Infrastructure.Persistence
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
-
                 _context.Users.Add(newUser);
                 await _context.SaveChangesAsync();
 
-                // ==========================================
                 // 2. LƯU COMPANY
-                // ==========================================
                 var newCompany = new Company
                 {
                     CompanyName = request.CompanyName,
-
-                    // MST không bắt buộc
-                    TaxCode = string.IsNullOrWhiteSpace(request.TaxCode)
-                        ? null
-                        : request.TaxCode.Trim(),
-
-                    // Trạng thái MST
-                    // Không có MST => NULL
-                    // Có MST => lấy trạng thái đã tra cứu
-                    TaxStatus = string.IsNullOrWhiteSpace(request.TaxCode)
-                        ? null
-                        : request.TaxStatus,
-
+                    TaxCode = string.IsNullOrWhiteSpace(request.TaxCode) ? null : request.TaxCode.Trim(),
+                    TaxStatus = string.IsNullOrWhiteSpace(request.TaxCode) ? null : request.TaxStatus,
                     Industry = request.Industry,
                     CompanySize = request.CompanySize,
-
                     Address = $"{request.DetailedAddress}, {request.District}, {request.City}",
-
                     Website = request.Website,
-
                     ContactEmail = request.Email,
                     PhoneNumber = request.PhoneNumber,
-
-                    // Trạng thái Company trên CareerConnect
                     Status = "PENDING",
-
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
-
                 _context.Companies.Add(newCompany);
                 await _context.SaveChangesAsync();
 
-                // ==========================================
                 // 3. LƯU COMPANY MEMBER
-                // ==========================================
                 var companyMember = new CompanyMember
                 {
                     CompanyId = newCompany.Id,
                     UserId = newUser.Id,
                     MemberRole = "OWNER",
                     Status = "PENDING",
-
                     FullName = request.ContactName,
                     ContactEmail = request.Email,
                     ZaloNumber = request.PhoneNumber,
-
                     CreatedAt = DateTime.UtcNow
                 };
-
                 _context.CompanyMembers.Add(companyMember);
                 await _context.SaveChangesAsync();
 
-                // ==========================================
-                // 4. COMMIT
-                // ==========================================
+                // 4. COMMIT & XÓA CACHE
                 await transaction.CommitAsync();
-
-                // ==========================================
-                // 5. XÓA CACHE
-                // ==========================================
                 _cache.Remove($"EmployerOtp_{email}");
                 _cache.Remove($"EmployerReg_{email}");
 
