@@ -115,5 +115,8 @@ namespace CareerConnect.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+
+      
     }
 }

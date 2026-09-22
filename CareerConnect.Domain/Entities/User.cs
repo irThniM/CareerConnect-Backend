@@ -30,18 +30,22 @@ namespace CareerConnect.Domain.Entities
 
 
         // ==========================================
-        // NAVIGATION PROPERTIES (Thiết lập quan hệ)
-        // Các thuộc tính này giúp Entity Framework Core hiểu mối quan hệ giữa các bảng[cite: 1].
+        // NAVIGATION PROPERTIES (Đã có Entity)
         // ==========================================
 
-        // Bạn có thể mở comment các dòng dưới đây khi bạn đã tạo xong các Entity tương ứng.
-
         public virtual CandidateProfile? CandidateProfile { get; set; }
-        // public virtual ICollection<UserExternalLogin> ExternalLogins { get; set; } = new List<UserExternalLogin>();
+        public virtual AdminProfile? AdminProfile { get; set; } // Mới thêm cho Admin
+
         public virtual ICollection<UserSession> Sessions { get; set; } = new List<UserSession>();
+        public virtual ICollection<CompanyMember> CompanyMembers { get; set; } = new List<CompanyMember>();
+
+        // ==========================================
+        // CHƯA CÓ ENTITY (Tạm thời comment lại)
+        // ==========================================
+
+        // public virtual ICollection<UserExternalLogin> ExternalLogins { get; set; } = new List<UserExternalLogin>();
         // public virtual ICollection<UserSecurityToken> SecurityTokens { get; set; } = new List<UserSecurityToken>();
         // public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
-        public virtual ICollection<CompanyMember> CompanyMembers { get; set; } = new List<CompanyMember>();
         // public virtual ICollection<Post> Posts { get; set; } = new List<Post>();
         // public virtual ICollection<Comment> Comments { get; set; } = new List<Comment>();
     }

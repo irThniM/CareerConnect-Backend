@@ -120,7 +120,7 @@ namespace CareerConnect.Infrastructure.Persistence
                 await _context.SaveChangesAsync();
 
                 // 2. LƯU COMPANY
-                var newCompany = new Company
+                var newCompany = new CompanyProfile
                 {
                     CompanyName = request.CompanyName,
                     TaxCode = string.IsNullOrWhiteSpace(request.TaxCode) ? null : request.TaxCode.Trim(),
@@ -135,7 +135,7 @@ namespace CareerConnect.Infrastructure.Persistence
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
-                _context.Companies.Add(newCompany);
+                _context.CompanyProfiles.Add(newCompany);
                 await _context.SaveChangesAsync();
 
                 // 3. LƯU COMPANY MEMBER
@@ -166,6 +166,7 @@ namespace CareerConnect.Infrastructure.Persistence
                 throw;
             }
         }
+
 
         public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
         {

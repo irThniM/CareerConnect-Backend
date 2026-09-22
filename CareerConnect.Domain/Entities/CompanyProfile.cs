@@ -1,6 +1,6 @@
 ﻿namespace CareerConnect.Domain.Entities
 {
-    public class Company
+    public class CompanyProfile
     {
         public long Id { get; set; }
         public string CompanyName { get; set; } = string.Empty;
