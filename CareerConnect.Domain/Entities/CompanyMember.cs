@@ -16,7 +16,7 @@
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         // Navigation properties
-        public Company Company { get; set; } = null!;
+        public CompanyProfile CompanyProfile { get; set; } = null!;
         public User User { get; set; } = null!;
     }
 }
