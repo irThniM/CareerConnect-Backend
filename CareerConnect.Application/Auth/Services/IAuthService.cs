@@ -8,8 +8,8 @@ namespace CareerConnect.Application.Auth.Services
         Task<AuthResponseDto> LoginAsync(LoginRequestDto request);
         Task<AuthResponseDto> RegisterCandidateAsync(RegisterCandidateRequestDto request);
         Task<AuthResponseDto> RegisterEmployerAsync(RegisterEmployerRequestDto request);
-        Task<bool> VerifyEmailAsync(string token);
-        Task<bool> VerifyEmployerOtpAsync(string email, string otp);
+        Task<bool> VerifyEmailAsync(VerifyEmailRequestDto request);
+        Task<bool> VerifyEmployerOtpAsync(VerifyEmployerOtpRequestDto request);
         Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request);
     }
 }

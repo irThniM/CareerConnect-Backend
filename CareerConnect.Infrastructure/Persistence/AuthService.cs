@@ -24,7 +24,7 @@ namespace CareerConnect.Infrastructure.Persistence
             _passwordHasher = passwordHasher;
             _jwtTokenService = jwtTokenService;
             _emailService = emailService;
-            _cache = cache; // Gán vào đây
+            _cache = cache;
         }
 
         public async Task<AuthResponseDto> RegisterCandidateAsync(RegisterCandidateRequestDto request)
@@ -32,21 +32,20 @@ namespace CareerConnect.Infrastructure.Persistence
             var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (existingUser != null) throw new Exception("Email này đã được sử dụng.");
 
-            // TẠO MÃ BÍ MẬT & LƯU TẠM VÀO CACHE (RAM) TRONG 15 PHÚT
-            var verificationToken = Guid.NewGuid().ToString("N");
-            _cache.Set(verificationToken, request, TimeSpan.FromMinutes(15));
+            // TẠO MÃ OTP 6 SỐ NGẪU NHIÊN VÀ LƯU CACHE
+            string otpCode = new Random().Next(100000, 999999).ToString();
 
-            // GẮN TOKEN VÀO ĐƯỜNG LINK GỬI CHO KHÁCH
-            string verifyLink = $"http://localhost:5173/verify-email?token={verificationToken}";
+            _cache.Set($"CandidateReg_{request.Email}", request, TimeSpan.FromMinutes(15));
+            _cache.Set($"CandidateOtp_{request.Email}", otpCode, TimeSpan.FromMinutes(15));
 
-            // GỌI API BREVO ĐỂ GỬI MAIL THEO TEMPLATE (Giả sử ID là 1)
+            // GỌI API BREVO ĐỂ GỬI MAIL THEO TEMPLATE (Truyền đúng OtpCode)
             await _emailService.SendEmailWithTemplateAsync(
                 toEmail: request.Email,
-                templateId: 1, // XEM LƯU Ý BÊN DƯỚI ĐỂ THAY SỐ NÀY
+                templateId: 1, // XEM LƯU Ý BÊN DƯỚI ĐỂ THAY SỐ NÀY BẰNG ID TEMPLATE BREVO CỦA BÁC
                 parameters: new
                 {
-                    FullName = request.FullName, // Brevo sẽ nhận bằng {{params.FullName}}
-                    VerifyLink = verifyLink      // Brevo sẽ nhận bằng {{params.VerifyLink}}
+                    FullName = request.FullName,
+                    OtpCode = otpCode
                 }
             );
 
@@ -67,15 +66,15 @@ namespace CareerConnect.Infrastructure.Persistence
             _cache.Set($"EmployerReg_{request.Email}", request, TimeSpan.FromMinutes(15));
             _cache.Set($"EmployerOtp_{request.Email}", otpCode, TimeSpan.FromMinutes(15));
 
-            // GỌI API BREVO ĐỂ GỬI MAIL THEO TEMPLATE (Giả sử ID là 2)
+            // GỌI API BREVO ĐỂ GỬI MAIL THEO TEMPLATE
             await _emailService.SendEmailWithTemplateAsync(
                 toEmail: request.Email,
-                templateId: 1, // XEM LƯU Ý BÊN DƯỚI ĐỂ THAY SỐ NÀY
+                templateId: 1,
                 parameters: new
                 {
-                    ContactName = request.ContactName, // Brevo sẽ nhận bằng {{params.ContactName}}
-                    CompanyName = request.CompanyName, // Brevo sẽ nhận bằng {{params.CompanyName}}
-                    OtpCode = otpCode                  // Brevo sẽ nhận bằng {{params.OtpCode}}
+                    ContactName = request.ContactName,
+                    CompanyName = request.CompanyName,
+                    OtpCode = otpCode
                 }
             );
 
@@ -85,16 +84,16 @@ namespace CareerConnect.Infrastructure.Persistence
 
 
         // 2. HÀM NÀY KIỂM TRA OTP VÀ MỚI THỰC SỰ LƯU VÀO DATABASE
-        public async Task<bool> VerifyEmployerOtpAsync(string email, string otp)
+        public async Task<bool> VerifyEmployerOtpAsync(VerifyEmployerOtpRequestDto request)
         {
             // Kiểm tra OTP
-            if (!_cache.TryGetValue($"EmployerOtp_{email}", out string? cachedOtp) || cachedOtp != otp)
+            if (!_cache.TryGetValue($"EmployerOtp_{request.Email}", out string? cachedOtp) || cachedOtp != request.Otp)
             {
                 throw new Exception("Mã OTP không chính xác hoặc đã hết hạn.");
             }
 
             // Lấy lại dữ liệu người dùng đã nhập ở Form
-            if (!_cache.TryGetValue($"EmployerReg_{email}", out RegisterEmployerRequestDto? request) || request == null)
+            if (!_cache.TryGetValue($"EmployerReg_{request.Email}", out RegisterEmployerRequestDto? cachedRegRequest) || cachedRegRequest == null)
             {
                 throw new Exception("Thông tin đăng ký đã hết hạn, vui lòng đăng ký lại từ đầu.");
             }
@@ -104,12 +103,12 @@ namespace CareerConnect.Infrastructure.Persistence
 
             try
             {
-                var hashedPassword = _passwordHasher.HashPassword(request.Password);
+                var hashedPassword = _passwordHasher.HashPassword(cachedRegRequest.Password);
 
                 // 1. LƯU USER
                 var newUser = new User
                 {
-                    Email = request.Email,
+                    Email = cachedRegRequest.Email,
                     PasswordHash = hashedPassword,
                     AccountType = AccountType.Employer,
                     Status = UserStatus.Active,
@@ -122,15 +121,15 @@ namespace CareerConnect.Infrastructure.Persistence
                 // 2. LƯU COMPANY
                 var newCompany = new CompanyProfile
                 {
-                    CompanyName = request.CompanyName,
-                    TaxCode = string.IsNullOrWhiteSpace(request.TaxCode) ? null : request.TaxCode.Trim(),
-                    TaxStatus = string.IsNullOrWhiteSpace(request.TaxCode) ? null : request.TaxStatus,
-                    Industry = request.Industry,
-                    CompanySize = request.CompanySize,
-                    Address = $"{request.DetailedAddress}, {request.District}, {request.City}",
-                    Website = request.Website,
-                    ContactEmail = request.Email,
-                    PhoneNumber = request.PhoneNumber,
+                    CompanyName = cachedRegRequest.CompanyName,
+                    TaxCode = string.IsNullOrWhiteSpace(cachedRegRequest.TaxCode) ? null : cachedRegRequest.TaxCode.Trim(),
+                    TaxStatus = string.IsNullOrWhiteSpace(cachedRegRequest.TaxCode) ? null : cachedRegRequest.TaxStatus,
+                    Industry = cachedRegRequest.Industry,
+                    CompanySize = cachedRegRequest.CompanySize,
+                    Address = $"{cachedRegRequest.DetailedAddress}, {cachedRegRequest.District}, {cachedRegRequest.City}",
+                    Website = cachedRegRequest.Website,
+                    ContactEmail = cachedRegRequest.Email,
+                    PhoneNumber = cachedRegRequest.PhoneNumber,
                     Status = "PENDING",
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
@@ -145,9 +144,9 @@ namespace CareerConnect.Infrastructure.Persistence
                     UserId = newUser.Id,
                     MemberRole = "OWNER",
                     Status = "PENDING",
-                    FullName = request.ContactName,
-                    ContactEmail = request.Email,
-                    ZaloNumber = request.PhoneNumber,
+                    FullName = cachedRegRequest.ContactName,
+                    ContactEmail = cachedRegRequest.Email,
+                    ZaloNumber = cachedRegRequest.PhoneNumber,
                     CreatedAt = DateTime.UtcNow
                 };
                 _context.CompanyMembers.Add(companyMember);
@@ -155,8 +154,8 @@ namespace CareerConnect.Infrastructure.Persistence
 
                 // 4. COMMIT & XÓA CACHE
                 await transaction.CommitAsync();
-                _cache.Remove($"EmployerOtp_{email}");
-                _cache.Remove($"EmployerReg_{email}");
+                _cache.Remove($"EmployerOtp_{request.Email}");
+                _cache.Remove($"EmployerReg_{request.Email}");
 
                 return true;
             }
@@ -170,7 +169,6 @@ namespace CareerConnect.Infrastructure.Persistence
 
         public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
         {
-            // 1. Tìm user, chỉ Include CandidateProfile thôi
             var user = await _context.Users
                 .Include(u => u.CandidateProfile)
                 .FirstOrDefaultAsync(u => u.Email == request.Email);
@@ -194,8 +192,7 @@ namespace CareerConnect.Infrastructure.Persistence
             var accessToken = _jwtTokenService.GenerateToken(user);
             var refreshToken = await CreateUserSessionAsync(user.Id);
 
-            // 2. Logic lấy tên hiển thị 
-            string fullName = user.Email.Split('@')[0]; // Tên mặc định
+            string fullName = user.Email.Split('@')[0];
 
             if (user.AccountType == AccountType.Candidate && user.CandidateProfile != null)
             {
@@ -203,7 +200,6 @@ namespace CareerConnect.Infrastructure.Persistence
             }
             else if (user.AccountType == AccountType.Employer)
             {
-                // Tự động chọc thẳng vào bảng CompanyMembers tìm thông tin theo UserId
                 var employerProfile = await _context.CompanyMembers
                     .FirstOrDefaultAsync(cm => cm.UserId == user.Id);
 
@@ -224,13 +220,19 @@ namespace CareerConnect.Infrastructure.Persistence
             };
         }
 
-        // HÀM NÀY ĐƯỢC CẬP NHẬT: KHI XÁC THỰC THÀNH CÔNG THÌ MỚI CHÍNH THỨC GHI DỮ LIỆU VÀO DATABASE
-        public async Task<bool> VerifyEmailAsync(string token) // Đổi tham số thành chuỗi token
+        // HÀM NÀY ĐƯỢC CẬP NHẬT: KIỂM TRA MÃ OTP THAY VÌ TOKEN LINK
+        public async Task<bool> VerifyEmailAsync(VerifyEmailRequestDto request)
         {
-            // Tìm token trong Cache
-            if (!_cache.TryGetValue(token, out RegisterCandidateRequestDto? cachedRequest) || cachedRequest == null)
+            // Kiểm tra OTP
+            if (!_cache.TryGetValue($"CandidateOtp_{request.Email}", out string? cachedOtp) || cachedOtp != request.Otp)
             {
-                throw new Exception("Đường dẫn xác thực không hợp lệ hoặc đã hết hạn.");
+                throw new Exception("Mã OTP không chính xác hoặc đã hết hạn.");
+            }
+
+            // Tìm thông tin đăng ký trong Cache
+            if (!_cache.TryGetValue($"CandidateReg_{request.Email}", out RegisterCandidateRequestDto? cachedRequest) || cachedRequest == null)
+            {
+                throw new Exception("Thông tin đăng ký đã hết hạn, vui lòng đăng ký lại.");
             }
 
             var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == cachedRequest.Email);
@@ -257,12 +259,12 @@ namespace CareerConnect.Infrastructure.Persistence
             _context.Users.Add(newUser);
             await _context.SaveChangesAsync();
 
-            // Lưu thành công thì xóa token khỏi Cache để không ai click lại được nữa
-            _cache.Remove(token);
+            // Lưu thành công thì xóa dữ liệu khỏi Cache
+            _cache.Remove($"CandidateOtp_{request.Email}");
+            _cache.Remove($"CandidateReg_{request.Email}");
 
             return true;
         }
-
 
         // Hàm hỗ trợ sinh và lưu Session vào bảng user_sessions
         private async Task<string> CreateUserSessionAsync(Guid userId)
@@ -274,7 +276,7 @@ namespace CareerConnect.Infrastructure.Persistence
             {
                 UserId = userId,
                 RefreshTokenHash = hashedToken,
-                ExpiresAt = DateTime.UtcNow.AddDays(7), // Refresh Token có hiệu lực 7 ngày
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -288,7 +290,6 @@ namespace CareerConnect.Infrastructure.Persistence
         {
             var hashedToken = _jwtTokenService.HashRefreshToken(request.RefreshToken);
 
-            // Tìm session hợp lệ trong DB
             var session = await _context.UserSessions
                 .Include(s => s.User)
                 .FirstOrDefaultAsync(s => s.RefreshTokenHash == hashedToken && s.RevokedAt == null && s.ExpiresAt > DateTime.UtcNow);

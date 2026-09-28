@@ -18,19 +18,19 @@ namespace CareerConnect.Api.Controllers
             _authService = authService;
         }
 
-            [HttpPost("register/candidate")]
-            public async Task<ActionResult<AuthResponseDto>> RegisterCandidate([FromBody] RegisterCandidateRequestDto request)
+        [HttpPost("register/candidate")]
+        public async Task<ActionResult<AuthResponseDto>> RegisterCandidate([FromBody] RegisterCandidateRequestDto request)
+        {
+            try
             {
-                try
-                {
-                    var result = await _authService.RegisterCandidateAsync(request);
-                    return Ok(result);
-                }
-                catch (Exception ex)
-                {
-                    return BadRequest(new { message = ex.Message });
-                }
+                var result = await _authService.RegisterCandidateAsync(request);
+                return Ok(result);
             }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
 
         [HttpPost("register/employer")]
         public async Task<IActionResult> RegisterEmployer([FromBody] RegisterEmployerRequestDto request)
@@ -46,18 +46,14 @@ namespace CareerConnect.Api.Controllers
             }
         }
 
-        public class VerifyOtpRequestDto
-        {
-            public string Email { get; set; } = string.Empty;
-            public string Otp { get; set; } = string.Empty;
-        }
 
         [HttpPost("verify-otp/employer")]
-        public async Task<IActionResult> VerifyEmployerOtp([FromBody] VerifyOtpRequestDto request)
+        public async Task<IActionResult> VerifyEmployerOtp([FromBody] VerifyEmployerOtpRequestDto request)
         {
             try
             {
-                await _authService.VerifyEmployerOtpAsync(request.Email, request.Otp);
+                // Truyền thẳng cục request DTO vào Service
+                await _authService.VerifyEmployerOtpAsync(request);
                 return Ok(new { message = "Xác thực thành công! Tài khoản đang chờ duyệt." });
             }
             catch (Exception ex)
@@ -65,7 +61,6 @@ namespace CareerConnect.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
-
 
         [HttpPost("login")]
         public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginRequestDto request)
@@ -81,18 +76,13 @@ namespace CareerConnect.Api.Controllers
             }
         }
 
-
-        public class VerifyEmailRequestDto
-        {
-            public string Token { get; set; } = string.Empty;
-        }
-
         [HttpPost("verify-email")]
         public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequestDto request)
         {
             try
             {
-                await _authService.VerifyEmailAsync(request.Token);
+                // Truyền thẳng cục request DTO vào Service
+                await _authService.VerifyEmailAsync(request);
                 return Ok(new { message = "Kích hoạt tài khoản thành công!" });
             }
             catch (Exception ex)
@@ -100,7 +90,6 @@ namespace CareerConnect.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
-
 
         [HttpPost("refresh-token")]
         public async Task<ActionResult<AuthResponseDto>> RefreshToken([FromBody] RefreshTokenRequestDto request)
@@ -115,8 +104,5 @@ namespace CareerConnect.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
-
-
-      
     }
 }
