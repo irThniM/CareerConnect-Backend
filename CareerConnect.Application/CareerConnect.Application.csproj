@@ -18,7 +18,6 @@
   <ItemGroup>
     <Folder Include="Common\" />
     <Folder Include="Candidates\" />
-    <Folder Include="Companies\" />
     <Folder Include="Jobs\" />
     <Folder Include="Applications\" />
     <Folder Include="Interviews\" />

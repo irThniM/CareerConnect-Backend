@@ -4,7 +4,12 @@ using CareerConnect.Domain.Enums;
 using CareerConnect.Infrastructure.Auth;
 using CareerConnect.Infrastructure.Email;
 using CareerConnect.Infrastructure.Persistence;
+using CareerConnect.Infrastructure.Ai;
 using Microsoft.EntityFrameworkCore;
+// 3 DÒNG NÀY LÀ BẮT BUỘC ĐỂ ĐỌC TOKEN
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace CareerConnect.Api.Extensions
 {
@@ -21,8 +26,31 @@ namespace CareerConnect.Api.Extensions
             services.AddScoped<PasswordHasher>();
             services.AddScoped<JwtTokenService>();
 
-            // THAY ĐỔI Ở ĐÂY: Đăng ký EmailService đi kèm với cấu hình HttpClient chuẩn
+            services.AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(options =>
+            {
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
+                        configuration["JwtSettings:Key"] ?? throw new Exception("Thiếu Key!"))),
+
+                    // SỬA 2 CÁI NÀY THÀNH FALSE, XÓA LUÔN DÒNG ValidIssuer/ValidAudience đi
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
+                    ValidateLifetime = true
+                };
+            });
+
+            // Đăng ký EmailService đi kèm với cấu hình HttpClient chuẩn
             services.AddHttpClient<IEmailService, EmailService>();
+
+            // Đăng ký Service AI xử lý hình ảnh KYB
+            services.AddScoped<IKybPdfService, KybPdfService>();
 
             services.AddMemoryCache();
 
@@ -40,6 +68,7 @@ namespace CareerConnect.Api.Extensions
 
             return services;
         }
+
         public static async Task SeedDatabaseAsync(this WebApplication app)
         {
             // Tạo một scope độc lập để lấy các Service ra dùng

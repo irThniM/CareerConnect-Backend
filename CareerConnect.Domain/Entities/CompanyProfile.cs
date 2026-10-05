@@ -14,6 +14,8 @@
         public string? PhoneNumber { get; set; }
         public string? Description { get; set; }
         public string Status { get; set; } = "ACTIVE"; // ACTIVE, BANNED
+        public string? LicensePdfUrl { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
