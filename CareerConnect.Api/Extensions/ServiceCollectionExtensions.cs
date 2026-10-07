@@ -1,13 +1,15 @@
-﻿using CareerConnect.Application.Auth.Services;
+﻿using CareerConnect.Application.Admin.Responses;
+using CareerConnect.Application.Admin.Services;
+using CareerConnect.Application.Auth.Services;
 using CareerConnect.Domain.Entities;
 using CareerConnect.Domain.Enums;
+using CareerConnect.Infrastructure.Ai;
 using CareerConnect.Infrastructure.Auth;
 using CareerConnect.Infrastructure.Email;
 using CareerConnect.Infrastructure.Persistence;
-using CareerConnect.Infrastructure.Ai;
-using Microsoft.EntityFrameworkCore;
 // 3 DÒNG NÀY LÀ BẮT BUỘC ĐỂ ĐỌC TOKEN
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 
@@ -23,6 +25,7 @@ namespace CareerConnect.Api.Extensions
 
             // 2. Đăng ký các dịch vụ Authentication & Security vào DI Container
             services.AddScoped<IAuthService, AuthService>();
+            services.AddScoped<IAdminService, AdminService>();
             services.AddScoped<PasswordHasher>();
             services.AddScoped<JwtTokenService>();
 
