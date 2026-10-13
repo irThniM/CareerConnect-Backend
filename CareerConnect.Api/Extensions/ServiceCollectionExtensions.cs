@@ -1,6 +1,7 @@
 ﻿using CareerConnect.Application.Admin.Responses;
 using CareerConnect.Application.Admin.Services;
 using CareerConnect.Application.Auth.Services;
+using CareerConnect.Application.Jobs.Services;
 using CareerConnect.Domain.Entities;
 using CareerConnect.Domain.Enums;
 using CareerConnect.Infrastructure.Ai;
@@ -21,7 +22,7 @@ namespace CareerConnect.Api.Extensions
         {
             // 1. Đăng ký Database (Neon / PostgreSQL)
             services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+                options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), o => o.UseVector()));
 
             // 2. Đăng ký các dịch vụ Authentication & Security vào DI Container
             services.AddScoped<IAuthService, AuthService>();
@@ -54,6 +55,11 @@ namespace CareerConnect.Api.Extensions
 
             // Đăng ký Service AI xử lý hình ảnh KYB
             services.AddScoped<IKybPdfService, KybPdfService>();
+
+            // ĐĂNG KÝ GEMINI SERVICE
+            services.AddHttpClient<IGeminiService, GeminiService>();
+
+            services.AddScoped<IJobService, JobService>();
 
             services.AddMemoryCache();
 

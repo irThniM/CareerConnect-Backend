@@ -1,6 +1,7 @@
 ﻿using CareerConnect.Application.Auth.Requests;
 using CareerConnect.Application.Auth.Responses;
 using CareerConnect.Application.Auth.Services;
+using CareerConnect.Domain.Enums;
 using CareerConnect.Infrastructure.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -62,13 +63,36 @@ namespace CareerConnect.Api.Controllers
             }
         }
 
-        [HttpPost("login")]
-        public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginRequestDto request)
+        [HttpPost("login/candidate")]
+        public async Task<ActionResult<AuthResponseDto>> CandidateLogin([FromBody] LoginRequestDto request)
+        {
+            return await LoginForAccountType(request, AccountType.Candidate);
+        }
+
+        [HttpPost("login/employer")]
+        public async Task<ActionResult<AuthResponseDto>> EmployerLogin([FromBody] LoginRequestDto request)
+        {
+            return await LoginForAccountType(request, AccountType.Employer);
+        }
+
+        [HttpPost("login/admin")]
+        public async Task<ActionResult<AuthResponseDto>> AdminLogin([FromBody] LoginRequestDto request)
+        {
+            return await LoginForAccountType(request, AccountType.Admin);
+        }
+
+        private async Task<ActionResult<AuthResponseDto>> LoginForAccountType(
+            LoginRequestDto request,
+            AccountType expectedAccountType)
         {
             try
             {
-                var result = await _authService.LoginAsync(request);
+                var result = await _authService.LoginAsync(request, expectedAccountType);
                 return Ok(result);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
             }
             catch (Exception ex)
             {

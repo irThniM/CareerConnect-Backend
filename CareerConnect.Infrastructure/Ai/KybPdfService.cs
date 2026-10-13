@@ -1,4 +1,5 @@
 ﻿using CareerConnect.Domain.Entities;
+using CareerConnect.Domain.Common;
 using CareerConnect.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -57,10 +58,14 @@ namespace CareerConnect.Infrastructure.Ai
                 throw new Exception("Không tìm thấy Mã số doanh nghiệp hợp lệ trong file PDF. Vui lòng kiểm tra lại file.");
             }
 
-            string extractedTaxCode = match.Groups[1].Value.Trim();
+            string extractedTaxCode = TaxCodeNormalizer.Normalize(match.Groups[1].Value)!;
+            if (!TaxCodeNormalizer.IsValid(extractedTaxCode))
+            {
+                throw new Exception("Mã số thuế trong PDF không đúng định dạng 10 hoặc 13 chữ số.");
+            }
 
             // 3. Gọi VietQR kiểm tra trạng thái và lấy thông tin Tên, Địa chỉ chuẩn
-            var (isValid, apiCompanyName, apiCompanyAddress) = await GetVietQrCompanyInfo(extractedTaxCode);
+            var (isValid, apiCompanyName, apiCompanyAddress, apiTaxStatus) = await GetVietQrCompanyInfo(extractedTaxCode);
             if (!isValid)
             {
                 throw new Exception($"Mã số thuế {extractedTaxCode} không tồn tại hoặc đã ngừng hoạt động trên hệ thống Thuế.");
@@ -75,11 +80,24 @@ namespace CareerConnect.Infrastructure.Ai
                 throw new Exception("Không tìm thấy hồ sơ doanh nghiệp.");
 
             var company = companyMember.CompanyProfile;
+            var isFirstVerification = company.Status != "ACTIVE";
+            if (company.Status == "BANNED" || companyMember.Status == "SUSPENDED")
+            {
+                throw new InvalidOperationException("Hồ sơ doanh nghiệp hoặc thành viên đang bị khóa. Vui lòng liên hệ quản trị viên.");
+            }
 
             // Kiểm tra khớp mã số thuế (nếu đã có)
-            if (!string.IsNullOrEmpty(company.TaxCode) && company.TaxCode != extractedTaxCode)
+            var registeredTaxCode = TaxCodeNormalizer.Normalize(company.TaxCode);
+            if (registeredTaxCode is not null && registeredTaxCode != extractedTaxCode)
             {
-                throw new Exception($"Mã số thuế trên giấy phép ({extractedTaxCode}) không khớp với hệ thống ({company.TaxCode}).");
+                throw new Exception($"Mã số thuế trên giấy phép ({extractedTaxCode}) không khớp với hệ thống ({registeredTaxCode}).");
+            }
+
+            var taxCodeBelongsToAnotherCompany = await _context.CompanyProfiles
+                .AnyAsync(otherCompany => otherCompany.Id != company.Id && otherCompany.TaxCode == extractedTaxCode);
+            if (taxCodeBelongsToAnotherCompany)
+            {
+                throw new InvalidOperationException("Mã số thuế này đã được liên kết với một công ty khác.");
             }
 
             // ================== UPLOAD PDF LÊN CLOUDINARY ==================
@@ -111,6 +129,7 @@ namespace CareerConnect.Infrastructure.Ai
 
             // 5. TỰ ĐỘNG ĐIỀN THÔNG TIN
             company.TaxCode = extractedTaxCode;
+            company.TaxStatus = apiTaxStatus;
 
             if (!string.IsNullOrEmpty(apiCompanyName))
             {
@@ -123,21 +142,32 @@ namespace CareerConnect.Infrastructure.Ai
             }
 
             // 6. AUTO-APPROVE: Kích hoạt tài khoản
+            if (isFirstVerification)
+            {
+                company.JobPostCreditsRemaining = CompanyProfile.InitialJobPostCredits;
+            }
             company.Status = "ACTIVE";
             companyMember.Status = "ACTIVE";
 
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (DatabaseConstraintErrors.IsTaxCodeUniqueViolation(ex))
+            {
+                throw new InvalidOperationException("Mã số thuế này vừa được liên kết với một công ty khác. Vui lòng kiểm tra lại.", ex);
+            }
 
             return true;
         }
 
         // Hàm gộp: Trả về (Trạng thái, Tên công ty, Địa chỉ)
-        private async Task<(bool IsValid, string Name, string Address)> GetVietQrCompanyInfo(string taxCode)
+        private async Task<(bool IsValid, string Name, string Address, string TaxStatus)> GetVietQrCompanyInfo(string taxCode)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.GetAsync($"https://api.vietqr.io/v2/business/{taxCode}");
 
-            if (!response.IsSuccessStatusCode) return (false, "", "");
+            if (!response.IsSuccessStatusCode) return (false, "", "", "");
 
             var content = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(content);
@@ -154,10 +184,10 @@ namespace CareerConnect.Infrastructure.Ai
                     string name = data.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
                     string address = data.TryGetProperty("address", out var a) ? a.GetString() ?? "" : "";
 
-                    return (isValid, name, address);
+                    return (isValid, name, address, status);
                 }
             }
-            return (false, "", "");
+            return (false, "", "", "");
         }
     }
 }

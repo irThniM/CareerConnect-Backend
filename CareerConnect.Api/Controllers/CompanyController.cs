@@ -1,4 +1,7 @@
 ﻿using CareerConnect.Infrastructure.Ai; // Khai báo đường dẫn tới thư mục Ai
+using CareerConnect.Domain.Common;
+using CareerConnect.Domain.Entities;
+using CareerConnect.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http; // Thêm thư viện để nhận file upload
 using Microsoft.AspNetCore.Mvc;
@@ -24,8 +27,8 @@ namespace CareerConnect.Api.Controllers // Gói vào namespace cho chuẩn
         {
             try
             {
-                taxCode = taxCode.Trim();
-                if (!System.Text.RegularExpressions.Regex.IsMatch(taxCode, @"^\d{10}(\d{3})?$"))
+                taxCode = TaxCodeNormalizer.Normalize(taxCode) ?? string.Empty;
+                if (!TaxCodeNormalizer.IsValid(taxCode))
                 {
                     return BadRequest(new { message = "Mã số thuế phải gồm 10 hoặc 13 chữ số." });
                 }
@@ -72,6 +75,11 @@ namespace CareerConnect.Api.Controllers // Gói vào namespace cho chuẩn
         [Authorize] // Bắt buộc user phải gửi Token hợp lệ
         public async Task<IActionResult> VerifyCompanyKYB([FromServices] IKybPdfService kybPdfService, IFormFile document)
         {
+            if (User.FindFirst("account_type")?.Value != AccountType.Employer.ToString())
+            {
+                return StatusCode(403, new { message = "Chỉ tài khoản Nhà tuyển dụng mới được xác minh hồ sơ công ty." });
+            }
+
             if (document == null || document.Length == 0)
             {
                 return BadRequest(new { message = "Vui lòng đính kèm tài liệu." });
@@ -81,7 +89,7 @@ namespace CareerConnect.Api.Controllers // Gói vào namespace cho chuẩn
             {
                 // 1. Tự động móc ID từ Token của user đang thực hiện request
                 // Nó sẽ tự dò tìm các key phổ biến thường dùng khi tạo JWT
-                string userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier)
                                    ?? User.FindFirstValue("sub")
                                    ?? User.FindFirstValue("id")
                                    ?? User.FindFirstValue("UserId");
@@ -111,10 +119,15 @@ namespace CareerConnect.Api.Controllers // Gói vào namespace cho chuẩn
         [Authorize]
         public async Task<IActionResult> GetMyCompanyProfile([FromServices] CareerConnect.Infrastructure.Persistence.AppDbContext context)
         {
+            if (User.FindFirst("account_type")?.Value != AccountType.Employer.ToString())
+            {
+                return StatusCode(403, new { message = "Chỉ tài khoản Nhà tuyển dụng mới được xem hồ sơ công ty." });
+            }
+
             try
             {
                 // 1. Móc UserId từ Token
-                string userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                var userIdString = User.FindFirstValue(ClaimTypes.NameIdentifier)
                                    ?? User.FindFirstValue("sub")
                                    ?? User.FindFirstValue("id")
                                    ?? User.FindFirstValue("UserId");
@@ -143,7 +156,8 @@ namespace CareerConnect.Api.Controllers // Gói vào namespace cho chuẩn
                     licensePdfUrl = company.LicensePdfUrl,
                     companyName = company.CompanyName,
                     taxCode = company.TaxCode,
-                    address = company.Address
+                    address = company.Address,
+                    jobPostCreditsRemaining = company.JobPostCreditsRemaining
                 });
             }
             catch (Exception ex)

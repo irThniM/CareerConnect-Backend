@@ -1,6 +1,7 @@
 ﻿using CareerConnect.Application.Auth.Requests;
 using CareerConnect.Application.Auth.Responses;
 using CareerConnect.Application.Auth.Services;
+using CareerConnect.Domain.Common;
 using CareerConnect.Domain.Entities;
 using CareerConnect.Domain.Enums;
 using CareerConnect.Infrastructure.Auth;
@@ -55,6 +56,25 @@ namespace CareerConnect.Infrastructure.Persistence
             var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (existingUser != null) throw new Exception("Email này đã được sử dụng.");
 
+            var normalizedTaxCode = TaxCodeNormalizer.Normalize(request.TaxCode);
+            if (normalizedTaxCode is not null)
+            {
+                if (!TaxCodeNormalizer.IsValid(normalizedTaxCode))
+                {
+                    throw new Exception("Mã số thuế phải gồm 10 hoặc 13 chữ số.");
+                }
+
+                if (await _context.CompanyProfiles.AnyAsync(company => company.TaxCode == normalizedTaxCode))
+                {
+                    throw new Exception("Mã số thuế này đã được đăng ký cho một công ty khác.");
+                }
+            }
+
+            // Cache only the canonical value; TaxStatus is populated from VietQR during KYB,
+            // never trusted from a value supplied by the browser.
+            request.TaxCode = normalizedTaxCode ?? string.Empty;
+            request.TaxStatus = null;
+
             string otpCode = new Random().Next(100000, 999999).ToString();
 
             _cache.Set($"EmployerReg_{request.Email}", request, TimeSpan.FromMinutes(15));
@@ -90,6 +110,12 @@ namespace CareerConnect.Infrastructure.Persistence
 
             try
             {
+                var normalizedTaxCode = TaxCodeNormalizer.Normalize(cachedRegRequest.TaxCode);
+                if (normalizedTaxCode is not null && !TaxCodeNormalizer.IsValid(normalizedTaxCode))
+                {
+                    throw new Exception("Mã số thuế phải gồm 10 hoặc 13 chữ số.");
+                }
+
                 var hashedPassword = _passwordHasher.HashPassword(cachedRegRequest.Password);
 
                 var newUser = new User
@@ -107,8 +133,8 @@ namespace CareerConnect.Infrastructure.Persistence
                 var newCompany = new CompanyProfile
                 {
                     CompanyName = cachedRegRequest.CompanyName,
-                    TaxCode = string.IsNullOrWhiteSpace(cachedRegRequest.TaxCode) ? null : cachedRegRequest.TaxCode.Trim(),
-                    TaxStatus = string.IsNullOrWhiteSpace(cachedRegRequest.TaxCode) ? null : cachedRegRequest.TaxStatus,
+                    TaxCode = normalizedTaxCode,
+                    TaxStatus = null,
                     Industry = cachedRegRequest.Industry,
                     CompanySize = cachedRegRequest.CompanySize,
                     Address = $"{cachedRegRequest.DetailedAddress}, {cachedRegRequest.District}, {cachedRegRequest.City}",
@@ -142,6 +168,11 @@ namespace CareerConnect.Infrastructure.Persistence
 
                 return true;
             }
+            catch (DbUpdateException ex) when (DatabaseConstraintErrors.IsTaxCodeUniqueViolation(ex))
+            {
+                await transaction.RollbackAsync();
+                throw new InvalidOperationException("Mã số thuế này vừa được đăng ký cho một công ty khác. Vui lòng kiểm tra lại.", ex);
+            }
             catch (Exception)
             {
                 await transaction.RollbackAsync();
@@ -149,7 +180,7 @@ namespace CareerConnect.Infrastructure.Persistence
             }
         }
 
-        public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request)
+        public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request, AccountType expectedAccountType)
         {
             var user = await _context.Users
                 .Include(u => u.CandidateProfile)
@@ -170,6 +201,11 @@ namespace CareerConnect.Infrastructure.Persistence
             if (!isPasswordValid)
             {
                 throw new Exception("Email hoặc mật khẩu không chính xác.");
+            }
+
+            if (user.AccountType != expectedAccountType)
+            {
+                throw new UnauthorizedAccessException("Loại tài khoản này không thể đăng nhập tại cổng đã chọn.");
             }
 
             var accessToken = _jwtTokenService.GenerateToken(user);

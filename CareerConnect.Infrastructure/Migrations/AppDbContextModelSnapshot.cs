@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
+using Pgvector;
 
 #nullable disable
 
@@ -20,6 +21,7 @@ namespace CareerConnect.Infrastructure.Migrations
                 .HasAnnotation("ProductVersion", "8.0.31")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "vector");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.AdminProfile", b =>
@@ -207,6 +209,10 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("JobPostCreditsRemaining")
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -243,6 +249,204 @@ namespace CareerConnect.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("companies_profile", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.Job", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("ApplicationCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ApplicationDeadline")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("CategoryId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("CompanyId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("CreatedByMemberId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Position")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("CreatedByMemberId");
+
+                    b.ToTable("jobs", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobCategory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("job_categories", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobProfile", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("EducationRequired")
+                        .HasColumnType("text");
+
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(3072)");
+
+                    b.Property<DateTime?>("EmbeddingUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EmploymentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExperienceRequired")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsSalaryNegotiable")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JobBenefits")
+                        .HasColumnType("text");
+
+                    b.Property<string>("JobDescription")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("JobId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("JobRequirements")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("text");
+
+                    b.Property<string>("NormalizedText")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("SalaryMax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("SalaryMin")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("WorkMode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobId")
+                        .IsUnique();
+
+                    b.ToTable("job_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobRequiredSkill", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("JobProfileId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SkillId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobProfileId");
+
+                    b.HasIndex("SkillId");
+
+                    b.ToTable("job_required_skills", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.Skill", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Category")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("skills", (string)null);
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.User", b =>
@@ -357,6 +561,62 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("CareerConnect.Domain.Entities.Job", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.JobCategory", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("CareerConnect.Domain.Entities.CompanyProfile", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.CompanyMember", "CreatedByMember")
+                        .WithMany()
+                        .HasForeignKey("CreatedByMemberId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Company");
+
+                    b.Navigation("CreatedByMember");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobProfile", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.Job", "Job")
+                        .WithOne("JobProfile")
+                        .HasForeignKey("CareerConnect.Domain.Entities.JobProfile", "JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Job");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobRequiredSkill", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.JobProfile", "JobProfile")
+                        .WithMany("RequiredSkills")
+                        .HasForeignKey("JobProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.Skill", "Skill")
+                        .WithMany()
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("JobProfile");
+
+                    b.Navigation("Skill");
+                });
+
             modelBuilder.Entity("CareerConnect.Domain.Entities.UserSession", b =>
                 {
                     b.HasOne("CareerConnect.Domain.Entities.User", "User")
@@ -371,6 +631,17 @@ namespace CareerConnect.Infrastructure.Migrations
             modelBuilder.Entity("CareerConnect.Domain.Entities.CompanyProfile", b =>
                 {
                     b.Navigation("CompanyMembers");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.Job", b =>
+                {
+                    b.Navigation("JobProfile")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobProfile", b =>
+                {
+                    b.Navigation("RequiredSkills");
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.User", b =>
