@@ -1,0 +1,10 @@
+.git
+.vs
+**/bin
+**/obj
+artifacts
+Back_Up
+**/appsettings.Development.json
+**/*.user
+**/*.suo
+**/TestResults
