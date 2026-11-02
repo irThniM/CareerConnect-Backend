@@ -20,8 +20,7 @@
 
         public string? NormalizedText { get; set; } // Nội dung chuẩn hóa phục vụ tìm kiếm/AI[cite: 1]
 
-        // Lưu ý: Trường Vector Embedding sẽ cần cài extension pgvector trong PostgreSQL
-        public string? Embedding { get; set; } // Vector hồ sơ[cite: 1] 
+        public Pgvector.Vector? Embedding { get; set; } // Vector hồ sơ
         public DateTime? EmbeddingUpdatedAt { get; set; } // Lần cập nhật embedding[cite: 1]
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow; // Thời điểm tạo[cite: 1]
@@ -29,5 +28,7 @@
 
         // Navigation property
         public User User { get; set; } = null!;
+        public Resume? Resume { get; set; }
+        public ICollection<CandidateSkill> Skills { get; set; } = new List<CandidateSkill>();
     }
 }

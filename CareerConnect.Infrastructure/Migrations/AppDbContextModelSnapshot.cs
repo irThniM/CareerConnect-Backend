@@ -65,6 +65,45 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.ToTable("admin_profiles", (string)null);
                 });
 
+            modelBuilder.Entity("CareerConnect.Domain.Entities.ApplicationStatusHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ApplicationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ChangedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NewStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("OldStatus")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("ApplicationId", "CreatedAt");
+
+                    b.ToTable("application_status_histories", (string)null);
+                });
+
             modelBuilder.Entity("CareerConnect.Domain.Entities.CandidateProfile", b =>
                 {
                     b.Property<long>("Id")
@@ -82,8 +121,8 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Embedding")
-                        .HasColumnType("text");
+                    b.Property<Vector>("Embedding")
+                        .HasColumnType("vector(3072)");
 
                     b.Property<DateTime?>("EmbeddingUpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -129,6 +168,36 @@ namespace CareerConnect.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("candidate_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.CandidateSkill", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("CandidateProfileId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SkillId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("CV");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SkillId");
+
+                    b.HasIndex("CandidateProfileId", "SkillId")
+                        .IsUnique();
+
+                    b.ToTable("candidate_skills", (string)null);
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.CompanyMember", b =>
@@ -209,15 +278,16 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("JobPostCreditsRemaining")
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
                     b.Property<string>("Industry")
                         .HasColumnType("text");
+
+                    b.Property<int>("JobPostCreditsRemaining")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("LicensePdfUrl")
                         .HasColumnType("text");
@@ -249,6 +319,97 @@ namespace CareerConnect.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("companies_profile", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.CompanySubscription", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("CompanyId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("EndAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("PackageId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("RemainingJobPosts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("StartAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PackageId");
+
+                    b.HasIndex("CompanyId", "Status", "EndAt");
+
+                    b.ToTable("company_subscriptions", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.InterviewSchedule", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("ApplicationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("ProposedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResponseNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("ScheduledStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProposedByUserId");
+
+                    b.HasIndex("ApplicationId", "ScheduledStart");
+
+                    b.ToTable("interview_schedules", (string)null);
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.Job", b =>
@@ -301,6 +462,74 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.HasIndex("CreatedByMemberId");
 
                     b.ToTable("jobs", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobApplication", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("CandidateProfileId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CoverLetter")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<long?>("InvitationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("JobId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ResumeCloudinaryPublicIdSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ResumeContentTypeSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("ResumeFileNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long?>("ResumeId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResumeId");
+
+                    b.HasIndex("CandidateProfileId", "AppliedAt");
+
+                    b.HasIndex("JobId", "CandidateProfileId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_job_applications_job_candidate");
+
+                    b.ToTable("job_applications", (string)null);
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.JobCategory", b =>
@@ -426,6 +655,185 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.ToTable("job_required_skills", (string)null);
                 });
 
+            modelBuilder.Entity("CareerConnect.Domain.Entities.Package", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("JobPostLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("MemberLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<decimal>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsActive");
+
+                    b.ToTable("packages", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<long>("CompanyId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("ProviderTransactionNo")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RawReturnDataJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("ResponseCode")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<long?>("SubscriptionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("TransactionRef")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubscriptionId");
+
+                    b.HasIndex("TransactionRef")
+                        .IsUnique();
+
+                    b.HasIndex("CompanyId", "CreatedAt");
+
+                    b.ToTable("payment_transactions", (string)null);
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.Resume", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("CandidateProfileId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CloudinaryPublicId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExtractedText")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExtractionMethod")
+                        .HasColumnType("text");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProcessingError")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProcessingStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("PENDING");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("UPLOADED");
+
+                    b.Property<string>("StructuredData")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CandidateProfileId")
+                        .IsUnique();
+
+                    b.ToTable("resumes", (string)null);
+                });
+
             modelBuilder.Entity("CareerConnect.Domain.Entities.Skill", b =>
                 {
                     b.Property<long>("Id")
@@ -531,6 +939,25 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("CareerConnect.Domain.Entities.ApplicationStatusHistory", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.JobApplication", "Application")
+                        .WithMany("StatusHistory")
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.User", "ChangedByUser")
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Application");
+
+                    b.Navigation("ChangedByUser");
+                });
+
             modelBuilder.Entity("CareerConnect.Domain.Entities.CandidateProfile", b =>
                 {
                     b.HasOne("CareerConnect.Domain.Entities.User", "User")
@@ -540,6 +967,25 @@ namespace CareerConnect.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.CandidateSkill", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.CandidateProfile", "CandidateProfile")
+                        .WithMany("Skills")
+                        .HasForeignKey("CandidateProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.Skill", "Skill")
+                        .WithMany()
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CandidateProfile");
+
+                    b.Navigation("Skill");
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.CompanyMember", b =>
@@ -559,6 +1005,44 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Navigation("CompanyProfile");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.CompanySubscription", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.CompanyProfile", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.Package", "Package")
+                        .WithMany()
+                        .HasForeignKey("PackageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Package");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.InterviewSchedule", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.JobApplication", "Application")
+                        .WithMany("Interviews")
+                        .HasForeignKey("ApplicationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.User", "ProposedByUser")
+                        .WithMany()
+                        .HasForeignKey("ProposedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Application");
+
+                    b.Navigation("ProposedByUser");
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.Job", b =>
@@ -585,6 +1069,32 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Navigation("Company");
 
                     b.Navigation("CreatedByMember");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobApplication", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.CandidateProfile", "CandidateProfile")
+                        .WithMany()
+                        .HasForeignKey("CandidateProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.Job", "Job")
+                        .WithMany()
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.Resume", "Resume")
+                        .WithMany()
+                        .HasForeignKey("ResumeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("CandidateProfile");
+
+                    b.Navigation("Job");
+
+                    b.Navigation("Resume");
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.JobProfile", b =>
@@ -617,6 +1127,35 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Navigation("Skill");
                 });
 
+            modelBuilder.Entity("CareerConnect.Domain.Entities.PaymentTransaction", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.CompanyProfile", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("CareerConnect.Domain.Entities.CompanySubscription", "Subscription")
+                        .WithMany()
+                        .HasForeignKey("SubscriptionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Company");
+
+                    b.Navigation("Subscription");
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.Resume", b =>
+                {
+                    b.HasOne("CareerConnect.Domain.Entities.CandidateProfile", "CandidateProfile")
+                        .WithOne("Resume")
+                        .HasForeignKey("CareerConnect.Domain.Entities.Resume", "CandidateProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CandidateProfile");
+                });
+
             modelBuilder.Entity("CareerConnect.Domain.Entities.UserSession", b =>
                 {
                     b.HasOne("CareerConnect.Domain.Entities.User", "User")
@@ -628,6 +1167,13 @@ namespace CareerConnect.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("CareerConnect.Domain.Entities.CandidateProfile", b =>
+                {
+                    b.Navigation("Resume");
+
+                    b.Navigation("Skills");
+                });
+
             modelBuilder.Entity("CareerConnect.Domain.Entities.CompanyProfile", b =>
                 {
                     b.Navigation("CompanyMembers");
@@ -637,6 +1183,13 @@ namespace CareerConnect.Infrastructure.Migrations
                 {
                     b.Navigation("JobProfile")
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("CareerConnect.Domain.Entities.JobApplication", b =>
+                {
+                    b.Navigation("Interviews");
+
+                    b.Navigation("StatusHistory");
                 });
 
             modelBuilder.Entity("CareerConnect.Domain.Entities.JobProfile", b =>

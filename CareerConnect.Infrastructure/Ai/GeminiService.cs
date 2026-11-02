@@ -6,11 +6,12 @@ namespace CareerConnect.Infrastructure.Ai
 {
     public interface IGeminiService
     {
-        Task<float[]> GetEmbeddingAsync(string text);
+        Task<float[]> GetEmbeddingAsync(string text, CancellationToken cancellationToken = default);
     }
 
     public class GeminiService : IGeminiService
     {
+        private const int MaxEmbeddingInputCharacters = 4500;
         private readonly HttpClient _httpClient;
         private readonly string _apiKey;
 
@@ -21,12 +22,16 @@ namespace CareerConnect.Infrastructure.Ai
             _apiKey = configuration["GeminiSettings:ApiKey"] ?? string.Empty;
         }
 
-        public async Task<float[]> GetEmbeddingAsync(string text)
+        public async Task<float[]> GetEmbeddingAsync(string text, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(_apiKey))
             {
                 throw new InvalidOperationException("Thiếu cấu hình GeminiSettings:ApiKey để tạo embedding.");
             }
+
+            text = text.Length <= MaxEmbeddingInputCharacters
+                ? text
+                : text[..MaxEmbeddingInputCharacters];
 
             // 1. Đổi sang model ổn định nhất của hệ sinh thái Gemini
             string modelName = "gemini-embedding-001";
@@ -42,7 +47,7 @@ namespace CareerConnect.Infrastructure.Ai
             };
 
             var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(url, jsonContent);
+            var response = await _httpClient.PostAsync(url, jsonContent, cancellationToken);
 
             // 2. Bắt lỗi chi tiết từ Google để dễ debug nếu có biến
             if (!response.IsSuccessStatusCode)

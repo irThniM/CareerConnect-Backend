@@ -148,6 +148,17 @@ namespace CareerConnect.Api.Controllers // Gói vào namespace cho chuẩn
                 }
 
                 var company = companyMember.CompanyProfile;
+                var now = DateTimeOffset.UtcNow;
+                var paidQuotas = await context.CompanySubscriptions
+                    .AsNoTracking()
+                    .Where(subscription => subscription.CompanyId == company.Id
+                        && subscription.Status == "ACTIVE"
+                        && subscription.StartAt <= now
+                        && subscription.EndAt > now)
+                    .Select(subscription => subscription.RemainingJobPosts)
+                    .ToListAsync();
+                var hasUnlimitedJobPosts = paidQuotas.Any(quota => quota is null);
+                var paidCredits = paidQuotas.Where(quota => quota.HasValue).Sum(quota => quota!.Value);
 
                 // 3. Trả về đúng các trường mà Frontend đang cần đọc
                 return Ok(new
@@ -157,7 +168,8 @@ namespace CareerConnect.Api.Controllers // Gói vào namespace cho chuẩn
                     companyName = company.CompanyName,
                     taxCode = company.TaxCode,
                     address = company.Address,
-                    jobPostCreditsRemaining = company.JobPostCreditsRemaining
+                    jobPostCreditsRemaining = company.JobPostCreditsRemaining + paidCredits,
+                    hasUnlimitedJobPosts
                 });
             }
             catch (Exception ex)

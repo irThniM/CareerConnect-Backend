@@ -1,6 +1,9 @@
 ﻿using CareerConnect.Application.Admin.Responses;
 using CareerConnect.Application.Admin.Services;
 using CareerConnect.Application.Auth.Services;
+using CareerConnect.Application.Candidates.Services;
+using CareerConnect.Application.Applications.Services;
+using CareerConnect.Application.Billing.Services;
 using CareerConnect.Application.Jobs.Services;
 using CareerConnect.Domain.Entities;
 using CareerConnect.Domain.Enums;
@@ -8,6 +11,7 @@ using CareerConnect.Infrastructure.Ai;
 using CareerConnect.Infrastructure.Auth;
 using CareerConnect.Infrastructure.Email;
 using CareerConnect.Infrastructure.Persistence;
+using CareerConnect.Infrastructure.Storage;
 // 3 DÒNG NÀY LÀ BẮT BUỘC ĐỂ ĐỌC TOKEN
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +31,7 @@ namespace CareerConnect.Api.Extensions
             // 2. Đăng ký các dịch vụ Authentication & Security vào DI Container
             services.AddScoped<IAuthService, AuthService>();
             services.AddScoped<IAdminService, AdminService>();
+            services.AddScoped<IResumeProcessingService, ResumeProcessingService>();
             services.AddScoped<PasswordHasher>();
             services.AddScoped<JwtTokenService>();
 
@@ -60,16 +65,26 @@ namespace CareerConnect.Api.Extensions
             services.AddHttpClient<IGeminiService, GeminiService>();
 
             services.AddScoped<IJobService, JobService>();
+            services.AddScoped<IApplicationService, ApplicationService>();
+            services.AddScoped<ICompanyBillingService, CompanyBillingService>();
+            services.AddHttpClient();
+            services.AddScoped<IResumeStorageService, CloudinaryResumeStorageService>();
 
             services.AddMemoryCache();
 
             // 3. MỞ CORS CHO FRONTEND (React - Vite cổng 5173)
+            var allowedOrigins = new[] { "http://localhost:5173" }
+                .Concat(configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>())
+                .Where(origin => !string.IsNullOrWhiteSpace(origin))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
             services.AddCors(options =>
             {
                 options.AddPolicy("AllowReactApp",
                     policy =>
                     {
-                        policy.WithOrigins("http://localhost:5173")
+                        policy.WithOrigins(allowedOrigins)
                               .AllowAnyHeader()
                               .AllowAnyMethod();
                     });

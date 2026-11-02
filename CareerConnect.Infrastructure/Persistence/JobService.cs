@@ -2,6 +2,7 @@
 using CareerConnect.Application.Employer.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using CareerConnect.Application.Employer.Requests;
+using CareerConnect.Application.Employer.Responses;
 using CareerConnect.Application.Jobs.Requests;
 using CareerConnect.Application.Jobs.Responses;
 using CareerConnect.Application.Jobs.Services;
@@ -49,13 +50,16 @@ namespace CareerConnect.Infrastructure.Persistence
             try
             {
                 var now = DateTime.UtcNow;
-                var quotaReserved = await _context.CompanyProfiles
-                    .Where(company => company.Id == member.CompanyId
-                        && company.Status == "ACTIVE"
-                        && company.JobPostCreditsRemaining > 0)
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(company => company.JobPostCreditsRemaining, company => company.JobPostCreditsRemaining - 1)
-                        .SetProperty(company => company.UpdatedAt, now));
+                var paidQuotaReserved = await ReserveActiveSubscriptionQuotaAsync(member.CompanyId, now);
+                var quotaReserved = paidQuotaReserved
+                    ? 1
+                    : await _context.CompanyProfiles
+                        .Where(company => company.Id == member.CompanyId
+                            && company.Status == "ACTIVE"
+                            && company.JobPostCreditsRemaining > 0)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(company => company.JobPostCreditsRemaining, company => company.JobPostCreditsRemaining - 1)
+                            .SetProperty(company => company.UpdatedAt, now));
 
                 if (quotaReserved == 0)
                 {
@@ -121,12 +125,7 @@ namespace CareerConnect.Infrastructure.Persistence
                 // PHẦN MỚI THÊM: GỌI AI NHÚNG VECTOR
                 // ==========================================
 
-                // 1. Nén thông tin cốt lõi lại thành đoạn text
-                var textToEmbed = $"Vị trí: {request.Position}. " +
-                                  $"Hình thức: {request.EmploymentType}, {request.WorkMode}. " +
-                                  $"Yêu cầu kinh nghiệm: {request.ExperienceRequired}. " +
-                                  $"Mô tả chi tiết: {request.JobDescription} " +
-                                  $"Kỹ năng cần có: {request.JobRequirements}";
+                var textToEmbed = await BuildJobEmbeddingInputAsync(request);
 
                 newProfile.NormalizedText = textToEmbed;
 
@@ -159,6 +158,312 @@ namespace CareerConnect.Infrastructure.Persistence
                 await transaction.RollbackAsync();
                 throw;
             }
+        }
+
+        public async Task<CreateJobRequestDto?> GetEmployerJobForEditAsync(
+            Guid userId,
+            long jobId,
+            CancellationToken cancellationToken = default)
+        {
+            var job = await _context.Jobs
+                .AsNoTracking()
+                .Include(item => item.JobProfile)
+                    .ThenInclude(profile => profile.RequiredSkills)
+                .FirstOrDefaultAsync(item => item.Id == jobId, cancellationToken);
+
+            if (job is null) return null;
+            await EnsureEmployerOwnsJobAsync(userId, job.CompanyId, cancellationToken);
+
+            var profile = job.JobProfile;
+            return new CreateJobRequestDto
+            {
+                Title = job.Title,
+                Position = job.Position,
+                CategoryId = job.CategoryId,
+                ApplicationDeadline = job.ApplicationDeadline,
+                EmploymentType = profile.EmploymentType,
+                WorkMode = profile.WorkMode,
+                Quantity = profile.Quantity,
+                SalaryMin = profile.SalaryMin,
+                SalaryMax = profile.SalaryMax,
+                IsSalaryNegotiable = profile.IsSalaryNegotiable,
+                ExperienceRequired = profile.ExperienceRequired,
+                EducationRequired = profile.EducationRequired,
+                Location = profile.Location,
+                JobDescription = profile.JobDescription,
+                JobRequirements = profile.JobRequirements,
+                JobBenefits = profile.JobBenefits,
+                RequiredSkillIds = profile.RequiredSkills.Select(skill => skill.SkillId).ToList()
+            };
+        }
+
+        public async Task<bool> UpdateJobAsync(
+            Guid userId,
+            long jobId,
+            CreateJobRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!request.CategoryId.HasValue || !await _context.JobCategories.AnyAsync(
+                    category => category.Id == request.CategoryId.Value && category.IsActive,
+                    cancellationToken))
+            {
+                throw new InvalidJobCategoryException("Vui lòng chọn một danh mục tuyển dụng đang hoạt động.");
+            }
+
+            var job = await _context.Jobs
+                .Include(item => item.JobProfile)
+                    .ThenInclude(profile => profile.RequiredSkills)
+                .FirstOrDefaultAsync(item => item.Id == jobId, cancellationToken);
+            if (job is null) return false;
+            await EnsureEmployerOwnsJobAsync(userId, job.CompanyId, cancellationToken);
+
+            var skillIds = (request.RequiredSkillIds ?? new List<long>()).Distinct().ToList();
+            if (skillIds.Count > 0)
+            {
+                var validSkillIds = await _context.Skills
+                    .Where(skill => skill.IsActive && skillIds.Contains(skill.Id))
+                    .Select(skill => skill.Id)
+                    .ToListAsync(cancellationToken);
+                if (validSkillIds.Count != skillIds.Count)
+                {
+                    throw new InvalidJobSkillException("Một hoặc nhiều kỹ năng đã chọn không còn khả dụng.");
+                }
+            }
+
+            var existingProfile = job.JobProfile;
+            var existingEmbeddingInput = await BuildJobEmbeddingInputAsync(new CreateJobRequestDto
+            {
+                Title = job.Title,
+                Position = job.Position,
+                CategoryId = job.CategoryId,
+                ApplicationDeadline = job.ApplicationDeadline,
+                EmploymentType = existingProfile.EmploymentType,
+                WorkMode = existingProfile.WorkMode,
+                Quantity = existingProfile.Quantity,
+                SalaryMin = existingProfile.SalaryMin,
+                SalaryMax = existingProfile.SalaryMax,
+                IsSalaryNegotiable = existingProfile.IsSalaryNegotiable,
+                ExperienceRequired = existingProfile.ExperienceRequired,
+                EducationRequired = existingProfile.EducationRequired,
+                Location = existingProfile.Location,
+                JobDescription = existingProfile.JobDescription,
+                JobRequirements = existingProfile.JobRequirements,
+                JobBenefits = existingProfile.JobBenefits,
+                RequiredSkillIds = existingProfile.RequiredSkills.Select(skill => skill.SkillId).ToList()
+            });
+            var updatedEmbeddingInput = await BuildJobEmbeddingInputAsync(request);
+
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var profile = job.JobProfile;
+                job.Title = request.Title.Trim();
+                job.Position = request.Position.Trim();
+                job.CategoryId = request.CategoryId;
+                job.ApplicationDeadline = request.ApplicationDeadline;
+                job.UpdatedAt = DateTime.UtcNow;
+
+                profile.EmploymentType = request.EmploymentType;
+                profile.WorkMode = request.WorkMode;
+                profile.Quantity = request.Quantity;
+                profile.SalaryMin = request.SalaryMin;
+                profile.SalaryMax = request.SalaryMax;
+                profile.IsSalaryNegotiable = request.IsSalaryNegotiable;
+                profile.ExperienceRequired = request.ExperienceRequired;
+                profile.EducationRequired = request.EducationRequired;
+                profile.Location = request.Location?.Trim();
+                profile.JobDescription = request.JobDescription.Trim();
+                profile.JobRequirements = request.JobRequirements.Trim();
+                profile.JobBenefits = request.JobBenefits?.Trim();
+
+                _context.JobRequiredSkills.RemoveRange(profile.RequiredSkills);
+                profile.RequiredSkills.Clear();
+                foreach (var skillId in skillIds)
+                {
+                    profile.RequiredSkills.Add(new JobRequiredSkill { SkillId = skillId });
+                }
+
+                if (profile.Embedding is null || !string.Equals(existingEmbeddingInput, updatedEmbeddingInput, StringComparison.Ordinal))
+                {
+                    var vector = await _geminiService.GetEmbeddingAsync(updatedEmbeddingInput, cancellationToken);
+                    profile.Embedding = new Vector(vector);
+                    profile.EmbeddingUpdatedAt = DateTime.UtcNow;
+                }
+                profile.NormalizedText = updatedEmbeddingInput;
+                job.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        }
+
+        public async Task<bool> ExtendJobDeadlineAsync(
+            Guid userId,
+            long jobId,
+            DateTime applicationDeadline,
+            CancellationToken cancellationToken = default)
+        {
+            var job = await _context.Jobs.FirstOrDefaultAsync(item => item.Id == jobId, cancellationToken);
+            if (job is null) return false;
+            await EnsureEmployerOwnsJobAsync(userId, job.CompanyId, cancellationToken);
+
+            if (job.Status != "OPEN")
+            {
+                throw new ArgumentException("Chỉ có thể gia hạn tin đang tuyển.");
+            }
+
+            var newDeadline = DateTime.SpecifyKind(applicationDeadline.Date, DateTimeKind.Utc);
+            var today = DateTime.UtcNow.Date;
+            if (newDeadline <= today || (job.ApplicationDeadline.HasValue && newDeadline <= job.ApplicationDeadline.Value.Date))
+            {
+                throw new ArgumentException("Hạn mới phải sau ngày hôm nay và sau hạn hiện tại.");
+            }
+
+            job.ApplicationDeadline = newDeadline;
+            job.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        private async Task<string> BuildJobEmbeddingInputAsync(CreateJobRequestDto request)
+        {
+            var skillIds = (request.RequiredSkillIds ?? new List<long>()).Distinct().ToList();
+            var skillNames = skillIds.Count == 0
+                ? new List<string>()
+                : await _context.Skills.AsNoTracking()
+                    .Where(skill => skillIds.Contains(skill.Id) && skill.IsActive)
+                    .OrderBy(skill => skill.Name)
+                    .Select(skill => skill.Name)
+                    .ToListAsync();
+
+            return $"Tin tuyển dụng: {request.Title}. Vị trí: {request.Position}. " +
+                   $"Địa điểm làm việc: {request.Location}. " +
+                   $"Hình thức: {request.EmploymentType}, {request.WorkMode}. " +
+                   $"Yêu cầu kinh nghiệm: {request.ExperienceRequired}. " +
+                   $"Mô tả chi tiết: {request.JobDescription} " +
+                   $"Yêu cầu ứng viên: {request.JobRequirements}. " +
+                   $"Kỹ năng yêu cầu: {string.Join(", ", skillNames)}. " +
+                   $"Quyền lợi: {request.JobBenefits}";
+        }
+
+        private async Task EnsureEmployerOwnsJobAsync(
+            Guid userId,
+            long companyId,
+            CancellationToken cancellationToken)
+        {
+            var isMember = await _context.CompanyMembers.AnyAsync(
+                member => member.UserId == userId
+                    && member.CompanyId == companyId
+                    && member.Status == "ACTIVE",
+                cancellationToken);
+            if (!isMember)
+            {
+                throw new JobPostingNotAllowedException("Bạn không có quyền quản lý tin tuyển dụng này.");
+            }
+        }
+
+        public async Task<EmployerDashboardDto?> GetEmployerDashboardAsync(Guid userId)
+        {
+            var company = await _context.CompanyMembers
+                .AsNoTracking()
+                .Where(member => member.UserId == userId)
+                .Select(member => new
+                {
+                    member.CompanyId,
+                    member.CompanyProfile.CompanyName,
+                    member.CompanyProfile.Status,
+                    member.CompanyProfile.JobPostCreditsRemaining
+                })
+                .FirstOrDefaultAsync();
+
+            if (company is null) return null;
+
+            var now = DateTimeOffset.UtcNow;
+            var activePaidQuotas = await _context.CompanySubscriptions
+                .AsNoTracking()
+                .Where(subscription => subscription.CompanyId == company.CompanyId
+                    && subscription.Status == "ACTIVE"
+                    && subscription.StartAt <= now
+                    && subscription.EndAt > now)
+                .Select(subscription => subscription.RemainingJobPosts)
+                .ToListAsync();
+            var hasUnlimitedJobPosts = activePaidQuotas.Any(quota => quota is null);
+            var availablePaidPosts = activePaidQuotas.Where(quota => quota.HasValue).Sum(quota => quota!.Value);
+
+            var jobs = _context.Jobs.AsNoTracking().Where(job => job.CompanyId == company.CompanyId);
+            var summary = await jobs
+                .GroupBy(job => job.CompanyId)
+                .Select(group => new
+                {
+                    TotalJobs = group.Count(),
+                    OpenJobs = group.Count(job => job.Status == "OPEN"),
+                    PendingJobs = group.Count(job => job.Status == "PENDING_REVIEW")
+                })
+                .FirstOrDefaultAsync();
+
+            var recentJobs = await jobs
+                .OrderByDescending(job => job.CreatedAt)
+                .ThenByDescending(job => job.Id)
+                .Select(job => new EmployerDashboardJobDto
+                {
+                    Id = job.Id,
+                    Title = job.Title,
+                    Position = job.Position,
+                    Status = job.Status,
+                    CreatedAt = job.CreatedAt,
+                    ApplicationDeadline = job.ApplicationDeadline,
+                    ApplicationCount = job.ApplicationCount
+                })
+                .ToListAsync();
+
+            return new EmployerDashboardDto
+            {
+                CompanyName = company.CompanyName,
+                CompanyStatus = company.Status,
+                JobPostCreditsRemaining = company.JobPostCreditsRemaining + availablePaidPosts,
+                HasUnlimitedJobPosts = hasUnlimitedJobPosts,
+                TotalJobs = summary?.TotalJobs ?? 0,
+                OpenJobs = summary?.OpenJobs ?? 0,
+                PendingJobs = summary?.PendingJobs ?? 0,
+                RecentJobs = recentJobs
+            };
+        }
+
+        private async Task<bool> ReserveActiveSubscriptionQuotaAsync(long companyId, DateTimeOffset now)
+        {
+            var availableSubscriptions = await _context.CompanySubscriptions
+                .Where(subscription => subscription.CompanyId == companyId
+                    && subscription.Status == "ACTIVE"
+                    && subscription.StartAt <= now
+                    && subscription.EndAt > now
+                    && (subscription.RemainingJobPosts == null || subscription.RemainingJobPosts > 0))
+                .OrderBy(subscription => subscription.EndAt)
+                .Select(subscription => new { subscription.Id, subscription.RemainingJobPosts })
+                .ToListAsync();
+
+            foreach (var subscription in availableSubscriptions)
+            {
+                if (subscription.RemainingJobPosts is null) return true;
+
+                var reserved = await _context.CompanySubscriptions
+                    .Where(item => item.Id == subscription.Id
+                        && item.Status == "ACTIVE"
+                        && item.StartAt <= now
+                        && item.EndAt > now
+                        && item.RemainingJobPosts > 0)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(item => item.RemainingJobPosts, item => item.RemainingJobPosts - 1)
+                        .SetProperty(item => item.UpdatedAt, now));
+                if (reserved > 0) return true;
+            }
+
+            return false;
         }
 
         public async Task<IReadOnlyList<JobCategoryDto>> GetActiveJobCategoriesAsync()
@@ -332,12 +637,10 @@ namespace CareerConnect.Infrastructure.Persistence
 
         private IQueryable<Job> PublicJobsQuery()
         {
-            var today = DateTime.UtcNow.Date;
             return _context.Jobs
                 .AsNoTracking()
                 .Where(job => job.Status == "OPEN")
-                .Where(job => job.Company.Status == "ACTIVE")
-                .Where(job => !job.ApplicationDeadline.HasValue || job.ApplicationDeadline.Value >= today);
+                .Where(job => job.Company.Status == "ACTIVE");
         }
     }
 }
